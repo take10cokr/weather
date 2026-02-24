@@ -1,0 +1,254 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import '../models/weather_model.dart';
+
+class WeatherService {
+  static const String _apiKey =
+      '793622d7dd6ef91e5a86118379a1797c650ee138bfe7a49a04f51ed126aa1338';
+
+  // 서울 강남구 격자 좌표
+  static const int _nx = 61;
+  static const int _ny = 125;
+
+  // 단기예보 base_time 목록 (내림차순)
+  static const List<String> _baseTimes = [
+    '2300', '2000', '1700', '1400', '1100', '0800', '0500', '0200'
+  ];
+
+  /// 현재 시각으로 베이스 날짜/시간 계산
+  Map<String, String> _getBaseDateTime() {
+    final now = DateTime.now();
+    final hour = now.hour;
+    final minute = now.minute;
+
+    // 현재 시각보다 이전인 가장 최근 base_time 찾기 (10분 딜레이 고려)
+    String baseTime = '2300';
+    DateTime baseDate = now;
+
+    for (final t in _baseTimes) {
+      final tHour = int.parse(t.substring(0, 2));
+      final tMin = 10; // 발표 후 10분 딜레이
+      if (hour > tHour || (hour == tHour && minute >= tMin)) {
+        baseTime = t;
+        break;
+      }
+    }
+
+    // base_time이 2300인데 현재시각이 0200보다 이전이면 전날 2300으로
+    if (baseTime == '2300' && hour < 2) {
+      baseDate = now.subtract(const Duration(days: 1));
+    }
+
+    final dateStr =
+        '${baseDate.year}${baseDate.month.toString().padLeft(2, '0')}${baseDate.day.toString().padLeft(2, '0')}';
+
+    return {'date': dateStr, 'time': baseTime};
+  }
+
+  /// 단기예보 API 호출
+  Future<List<WeatherForecast>> fetchForecast() async {
+    final dt = _getBaseDateTime();
+    final uri = Uri.parse(
+      'https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst'
+      '?serviceKey=$_apiKey'
+      '&pageNo=1'
+      '&numOfRows=1000'
+      '&dataType=JSON'
+      '&base_date=${dt['date']}'
+      '&base_time=${dt['time']}'
+      '&nx=$_nx'
+      '&ny=$_ny',
+    );
+
+    try {
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final body = jsonDecode(utf8.decode(response.bodyBytes));
+        final items = body['response']['body']['items']['item'] as List;
+        return items.map((e) => WeatherForecast.fromJson(e)).toList();
+      }
+    } catch (e) {
+      // 에러 시 빈 리스트 반환
+    }
+    return [];
+  }
+
+  /// 시간별 날씨 데이터 파싱 (오늘 기준 6시간)
+  List<HourlyWeatherData> parseHourlyData(List<WeatherForecast> forecasts) {
+    final now = DateTime.now();
+    final todayStr =
+        '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
+
+    // 오늘 데이터만 추출, 현재 시간 이후
+    final Map<String, Map<String, String>> grouped = {};
+    for (final f in forecasts) {
+      if (f.fcstDate != todayStr) continue;
+      final fHour = int.parse(f.fcstTime.substring(0, 2));
+      if (fHour < now.hour) continue;
+      grouped.putIfAbsent(f.fcstTime, () => {});
+      grouped[f.fcstTime]![f.category] = f.fcstValue;
+    }
+
+    final sorted = grouped.keys.toList()..sort();
+    return sorted.take(6).map((time) {
+      final data = grouped[time]!;
+      final hour = int.parse(time.substring(0, 2));
+      final ampm = hour < 12 ? '오전' : '오후';
+      final displayHour = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
+      return HourlyWeatherData(
+        time: '$ampm ${displayHour}시',
+        temp: double.tryParse(data['TMP'] ?? '0') ?? 0,
+        sky: int.tryParse(data['SKY'] ?? '1') ?? 1,
+        pty: int.tryParse(data['PTY'] ?? '0') ?? 0,
+        pop: int.tryParse(data['POP'] ?? '0') ?? 0,
+        reh: double.tryParse(data['REH'] ?? '0') ?? 0,
+        wsd: double.tryParse(data['WSD'] ?? '0') ?? 0,
+      );
+    }).toList();
+  }
+
+  /// 오늘 현재 기온 가져오기
+  HourlyWeatherData? getCurrentWeather(List<WeatherForecast> forecasts) {
+    final hourly = parseHourlyData(forecasts);
+    return hourly.isNotEmpty ? hourly.first : null;
+  }
+
+  /// 오늘 최고/최저 기온
+  Map<String, double> getTodayMinMax(List<WeatherForecast> forecasts) {
+    final now = DateTime.now();
+    final todayStr =
+        '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
+
+    final tmxList = forecasts.where((f) => f.fcstDate == todayStr && f.category == 'TMX').map((f) => double.tryParse(f.fcstValue) ?? 0).toList();
+    final tmnList = forecasts.where((f) => f.fcstDate == todayStr && f.category == 'TMN').map((f) => double.tryParse(f.fcstValue) ?? 0).toList();
+    final tmpList = forecasts.where((f) => f.fcstDate == todayStr && f.category == 'TMP').map((f) => double.tryParse(f.fcstValue) ?? 0).toList();
+
+    double maxTemp = tmxList.isNotEmpty ? tmxList.reduce((a, b) => a > b ? a : b) : (tmpList.isNotEmpty ? tmpList.reduce((a, b) => a > b ? a : b) : 0);
+    double minTemp = tmnList.isNotEmpty ? tmnList.reduce((a, b) => a < b ? a : b) : (tmpList.isNotEmpty ? tmpList.reduce((a, b) => a < b ? a : b) : 0);
+
+    return {'max': maxTemp, 'min': minTemp};
+  }
+
+  /// 주간 예보 파싱 (7일치)
+  List<DailyForecastData> parseDailyForecast(List<WeatherForecast> forecasts) {
+    final now = DateTime.now();
+    final Map<String, Map<String, dynamic>> dailyMap = {};
+
+    for (final f in forecasts) {
+      dailyMap.putIfAbsent(f.fcstDate, () => {'tmps': <double>[], 'skys': <int>[], 'ptys': <int>[]});
+      if (f.category == 'TMP') {
+        (dailyMap[f.fcstDate]!['tmps'] as List<double>).add(double.tryParse(f.fcstValue) ?? 0);
+      }
+      if (f.category == 'TMX') {
+        dailyMap[f.fcstDate]!['tmx'] = double.tryParse(f.fcstValue) ?? 0;
+      }
+      if (f.category == 'TMN') {
+        dailyMap[f.fcstDate]!['tmn'] = double.tryParse(f.fcstValue) ?? 0;
+      }
+      if (f.category == 'SKY') {
+        (dailyMap[f.fcstDate]!['skys'] as List<int>).add(int.tryParse(f.fcstValue) ?? 1);
+      }
+      if (f.category == 'PTY') {
+        (dailyMap[f.fcstDate]!['ptys'] as List<int>).add(int.tryParse(f.fcstValue) ?? 0);
+      }
+    }
+
+    final dayLabels = ['오늘', '내일', '모레'];
+    final weekDays = ['일', '월', '화', '수', '목', '금', '토'];
+    final sortedDates = dailyMap.keys.toList()..sort();
+
+    return sortedDates.take(7).toList().asMap().entries.map((entry) {
+      final idx = entry.key;
+      final date = entry.value;
+      final data = dailyMap[date]!;
+
+      final tmps = data['tmps'] as List<double>;
+      final skys = data['skys'] as List<int>;
+      final ptys = data['ptys'] as List<int>;
+
+      double maxT = data['tmx'] as double? ?? (tmps.isNotEmpty ? tmps.reduce((a, b) => a > b ? a : b) : 0);
+      double minT = data['tmn'] as double? ?? (tmps.isNotEmpty ? tmps.reduce((a, b) => a < b ? a : b) : 0);
+
+      // 대표 날씨 (가장 많이 나온 값)
+      int sky = skys.isNotEmpty ? _mode(skys) : 1;
+      int pty = ptys.isNotEmpty ? _mode(ptys) : 0;
+
+      // 날짜 → 요일 계산
+      String label;
+      if (idx < dayLabels.length) {
+        label = dayLabels[idx];
+      } else {
+        final d = DateTime(
+          int.parse(date.substring(0, 4)),
+          int.parse(date.substring(4, 6)),
+          int.parse(date.substring(6, 8)),
+        );
+        label = weekDays[d.weekday % 7];
+      }
+
+      return DailyForecastData(
+        date: date,
+        dayLabel: label,
+        maxTemp: maxT,
+        minTemp: minT,
+        sky: sky,
+        pty: pty,
+      );
+    }).toList();
+  }
+
+  int _mode(List<int> list) {
+    final freq = <int, int>{};
+    for (final v in list) freq[v] = (freq[v] ?? 0) + 1;
+    return freq.entries.reduce((a, b) => a.value > b.value ? a : b).key;
+  }
+
+  /// 생활기상지수 - 옷차림 지수 API
+  Future<DressingIndex?> fetchDressingIndex() async {
+    final now = DateTime.now();
+    final dateStr =
+        '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
+
+    final uri = Uri.parse(
+      'https://apis.data.go.kr/1360000/LivingWthrIdxServiceV4/getLivingWthrIdxV4DressingIdex'
+      '?serviceKey=$_apiKey'
+      '&pageNo=1'
+      '&numOfRows=10'
+      '&dataType=JSON'
+      '&areaNo=1168000000' // 서울 강남구 행정코드
+      '&time=${dateStr}06', // YYYYMMDDH
+    );
+
+    try {
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final body = jsonDecode(utf8.decode(response.bodyBytes));
+        final item = body['response']['body']['items']['item'];
+        if (item != null) {
+          final data = item is List ? item.first : item;
+          return DressingIndex(
+            h3: data['h3']?.toString() ?? '65',
+            h6: data['h6']?.toString() ?? '65',
+            h9: data['h9']?.toString() ?? '65',
+            h12: data['h12']?.toString() ?? '65',
+          );
+        }
+      }
+    } catch (e) {
+      // 에러 시 null 반환
+    }
+    return null;
+  }
+
+  /// 습도 가져오기 (현재 시간대)
+  double getCurrentHumidity(List<WeatherForecast> forecasts) {
+    final current = getCurrentWeather(forecasts);
+    return current?.reh ?? 45;
+  }
+
+  /// 풍속 가져오기
+  double getCurrentWindSpeed(List<WeatherForecast> forecasts) {
+    final current = getCurrentWeather(forecasts);
+    return current?.wsd ?? 2.5;
+  }
+}
