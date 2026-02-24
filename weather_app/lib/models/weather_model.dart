@@ -143,3 +143,38 @@ class DressingIndex {
     return '🩳';
   }
 }
+
+class AirQualityData {
+  final int aqi;
+  final String pm25;
+  final String pm10;
+  final String o3;
+  final String no2;
+  final String so2;
+  final String co;
+  final String dataTime;
+
+  AirQualityData({
+    required this.aqi,
+    required this.pm25,
+    required this.pm10,
+    required this.o3,
+    required this.no2,
+    required this.so2,
+    required this.co,
+    required this.dataTime,
+  });
+
+  factory AirQualityData.fromJson(Map<String, dynamic> json) {
+    return AirQualityData(
+      aqi: int.tryParse(json['khaiValue']?.toString() ?? '0') ?? 0,
+      pm25: json['pm25Value']?.toString() ?? '0',
+      pm10: json['pm10Value']?.toString() ?? '0',
+      o3: json['o3Value']?.toString() ?? '0',
+      no2: json['no2Value']?.toString() ?? '0',
+      so2: json['so2Value']?.toString() ?? '0',
+      co: json['coValue']?.toString() ?? '0',
+      dataTime: json['dataTime']?.toString() ?? '',
+    );
+  }
+}

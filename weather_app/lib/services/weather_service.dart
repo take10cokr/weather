@@ -6,9 +6,14 @@ class WeatherService {
   static const String _apiKey =
       '793622d7dd6ef91e5a86118379a1797c650ee138bfe7a49a04f51ed126aa1338';
 
-  // 서울 강남구 격자 좌표
-  static const int _nx = 61;
-  static const int _ny = 125;
+  // 기본 격자 좌표 (서울 강남구 역삼동)
+  int _nx = 61;
+  int _ny = 125;
+
+  void setGrid(int nx, int ny) {
+    _nx = nx;
+    _ny = ny;
+  }
 
   // 단기예보 base_time 목록 (내림차순)
   static const List<String> _baseTimes = [
@@ -48,56 +53,69 @@ class WeatherService {
   /// 단기예보 API 호출
   Future<List<WeatherForecast>> fetchForecast() async {
     final dt = _getBaseDateTime();
-    final uri = Uri.parse(
-      'https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst'
-      '?serviceKey=$_apiKey'
-      '&pageNo=1'
-      '&numOfRows=1000'
-      '&dataType=JSON'
-      '&base_date=${dt['date']}'
-      '&base_time=${dt['time']}'
-      '&nx=$_nx'
-      '&ny=$_ny',
+    final uri = Uri.https(
+      'apis.data.go.kr',
+      '/1360000/VilageFcstInfoService_2.0/getVilageFcst',
+      {
+        'serviceKey': _apiKey,
+        'pageNo': '1',
+        'numOfRows': '1500',
+        'dataType': 'JSON',
+        'base_date': dt['date']!,
+        'base_time': dt['time']!,
+        'nx': '$_nx',
+        'ny': '$_ny',
+      },
     );
 
     try {
-      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      final response = await http.get(uri).timeout(const Duration(seconds: 15));
       if (response.statusCode == 200) {
         final body = jsonDecode(utf8.decode(response.bodyBytes));
+        final resultCode = body['response']['header']['resultCode'];
+        if (resultCode != '00') return [];
         final items = body['response']['body']['items']['item'] as List;
         return items.map((e) => WeatherForecast.fromJson(e)).toList();
       }
     } catch (e) {
-      // 에러 시 빈 리스트 반환
+      // ignore
     }
     return [];
   }
 
-  /// 시간별 날씨 데이터 파싱 (오늘 기준 6시간)
+  /// 시간별 날씨 데이터 파싱 (현재 시간 포함 6시간)
   List<HourlyWeatherData> parseHourlyData(List<WeatherForecast> forecasts) {
     final now = DateTime.now();
     final todayStr =
         '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
+    // 현재 시간에서 1시간 전부터 포함 (더 많은 데이터 확보)
+    final cutHour = now.hour > 0 ? now.hour - 1 : 0;
 
-    // 오늘 데이터만 추출, 현재 시간 이후
     final Map<String, Map<String, String>> grouped = {};
     for (final f in forecasts) {
       if (f.fcstDate != todayStr) continue;
       final fHour = int.parse(f.fcstTime.substring(0, 2));
-      if (fHour < now.hour) continue;
+      if (fHour < cutHour) continue;
       grouped.putIfAbsent(f.fcstTime, () => {});
       grouped[f.fcstTime]![f.category] = f.fcstValue;
     }
 
+    // 현재 시간에 가장 가까운 시간 먼저 정렬
     final sorted = grouped.keys.toList()..sort();
-    return sorted.take(6).map((time) {
+    // 현재 시간 이후 것만 표시용 (or 가장 최근)
+    final nowStr = now.hour.toString().padLeft(2, '0') + '00';
+    final futureSlots = sorted.where((t) => t.compareTo(nowStr) >= 0).toList();
+    final displaySlots = futureSlots.isNotEmpty ? futureSlots : sorted;
+
+    return displaySlots.take(7).map((time) {
       final data = grouped[time]!;
       final hour = int.parse(time.substring(0, 2));
+      final isNowSlot = hour == now.hour;
       final ampm = hour < 12 ? '오전' : '오후';
       final displayHour = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
       return HourlyWeatherData(
-        time: '$ampm ${displayHour}시',
-        temp: double.tryParse(data['TMP'] ?? '0') ?? 0,
+        time: isNowSlot ? '지금' : '$ampm ${displayHour}시',
+        temp: double.tryParse(data['TMP'] ?? '') ?? 0,
         sky: int.tryParse(data['SKY'] ?? '1') ?? 1,
         pty: int.tryParse(data['PTY'] ?? '0') ?? 0,
         pop: int.tryParse(data['POP'] ?? '0') ?? 0,
@@ -250,5 +268,38 @@ class WeatherService {
   double getCurrentWindSpeed(List<WeatherForecast> forecasts) {
     final current = getCurrentWeather(forecasts);
     return current?.wsd ?? 2.5;
+  }
+
+  /// 에어코리아 대기질 실시간 정보 가져오기 (시도별 실시간 측정 데이터)
+  Future<AirQualityData?> fetchAirQuality(String city) async {
+    // API 주소: 한국환경공단_에어코리아_대기오염정보
+    final uri = Uri.parse(
+        'https://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getCtprvnRltmMesureDnsty'
+        '?serviceKey=$_apiKey'
+        '&returnType=json'
+        '&numOfRows=100'
+        '&pageNo=1'
+        '&sidoName=서울' // 일단 서울로 고정, 나중에 지역에 맞춰 변경 가능
+        '&ver=1.0');
+
+    try {
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final body = jsonDecode(utf8.decode(response.bodyBytes));
+        final items = body['response']['body']['items'] as List;
+        
+        // 해당 시군구(stationName) 데이터 찾기
+        final item = items.firstWhere(
+            (e) => e['stationName'] == city, 
+            orElse: () => items.first);
+
+        if (item != null) {
+          return AirQualityData.fromJson(item);
+        }
+      }
+    } catch (e) {
+      // 에러 시 null
+    }
+    return null;
   }
 }

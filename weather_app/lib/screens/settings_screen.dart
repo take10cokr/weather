@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../services/app_settings.dart';
 import '../theme/app_theme.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -11,7 +13,6 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _notificationsEnabled = true;
   bool _locationEnabled = true;
-  bool _darkModeEnabled = false;
   String _selectedUnit = '섭씨 (°C)';
   String _selectedLanguage = '한국어';
   String _updateInterval = '30분마다';
@@ -46,8 +47,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _buildDropdownTile(Icons.thermostat, '온도 단위', _selectedUnit, ['섭씨 (°C)', '화씨 (°F)'], (v) => setState(() => _selectedUnit = v!)),
               _buildDropdownTile(Icons.language, '언어', _selectedLanguage, ['한국어', 'English', '日本語'], (v) => setState(() => _selectedLanguage = v!)),
               _buildDropdownTile(Icons.update, '업데이트 주기', _updateInterval, ['10분마다', '30분마다', '1시간마다'], (v) => setState(() => _updateInterval = v!)),
-              _buildSwitchTile(Icons.dark_mode, '다크 모드', '어두운 테마로 변경', _darkModeEnabled, (v) => setState(() => _darkModeEnabled = v), AppTheme.textSecondary),
             ]),
+            const SizedBox(height: 16),
+            _buildSectionTitle('미세먼지 표시 기준'),
+            _buildDustStandardCard(),
             const SizedBox(height: 16),
             _buildSectionTitle('앱 정보'),
             _buildSettingCard([
@@ -177,6 +180,121 @@ class _SettingsScreenState extends State<SettingsScreen> {
           if (trailing.isNotEmpty) Text(trailing, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
           const Icon(Icons.chevron_right, color: AppTheme.textSecondary),
         ],
+      ),
+    );
+  }
+
+  Widget _buildDustStandardCard() {
+    final settings = context.watch<AppSettings>();
+    final current = settings.dustStandard;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10)],
+      ),
+      child: Column(
+        children: [
+          // 안내 배너
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF43A047).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.masks_outlined, color: Color(0xFF43A047), size: 20),
+                ),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Text(
+                    '기준에 따라 대기질 등급이 달라집니다',
+                    style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Divider(height: 1, indent: 16, endIndent: 16, color: Colors.grey.shade100),
+          // 국내 기준
+          _buildStandardOption(
+            standard: DustStandard.korean,
+            current: current,
+            icon: '🇰🇷',
+            title: '국내 기준 (환경부)',
+            description: 'PM2.5  좋음 ≤15 · 보통 ≤35 · 나쁨 ≤75 μg/m³',
+            settings: settings,
+          ),
+          Divider(height: 1, indent: 16, endIndent: 16, color: Colors.grey.shade100),
+          // WHO 기준
+          _buildStandardOption(
+            standard: DustStandard.who,
+            current: current,
+            icon: '🌍',
+            title: '엄격한 기준 (WHO)',
+            description: 'PM2.5  좋음 ≤5 · 보통 ≤15 · 나쁨 ≤25 μg/m³',
+            settings: settings,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStandardOption({
+    required DustStandard standard,
+    required DustStandard current,
+    required String icon,
+    required String title,
+    required String description,
+    required AppSettings settings,
+  }) {
+    final isSelected = standard == current;
+    return InkWell(
+      onTap: () => settings.setDustStandard(standard),
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            Text(icon, style: const TextStyle(fontSize: 24)),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                    color: isSelected ? AppTheme.primaryColor : AppTheme.textPrimary,
+                  )),
+                  const SizedBox(height: 3),
+                  Text(description, style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+                ],
+              ),
+            ),
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              width: 22,
+              height: 22,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: isSelected ? AppTheme.primaryColor : Colors.transparent,
+                border: Border.all(
+                  color: isSelected ? AppTheme.primaryColor : Colors.grey.shade300,
+                  width: 2,
+                ),
+              ),
+              child: isSelected
+                  ? const Icon(Icons.check, size: 14, color: Colors.white)
+                  : null,
+            ),
+          ],
+        ),
       ),
     );
   }

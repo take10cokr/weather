@@ -1,0 +1,384 @@
+import 'package:flutter/material.dart';
+import 'dart:math' as math;
+import '../theme/app_theme.dart';
+
+/// 일출/일몰 호(Arc) 카드
+class SunriseSunsetCard extends StatefulWidget {
+  final String sunriseTime; // "07:12"
+  final String sunsetTime;  // "17:44"
+
+  const SunriseSunsetCard({
+    super.key,
+    required this.sunriseTime,
+    required this.sunsetTime,
+  });
+
+  @override
+  State<SunriseSunsetCard> createState() => _SunriseSunsetCardState();
+}
+
+class _SunriseSunsetCardState extends State<SunriseSunsetCard>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _progressAnim;
+
+  double _getSunProgress() {
+    final now = DateTime.now();
+    final sunriseParts = widget.sunriseTime.split(':');
+    final sunsetParts = widget.sunsetTime.split(':');
+    final sunrise = DateTime(now.year, now.month, now.day,
+        int.parse(sunriseParts[0]), int.parse(sunriseParts[1]));
+    final sunset = DateTime(now.year, now.month, now.day,
+        int.parse(sunsetParts[0]), int.parse(sunsetParts[1]));
+    if (now.isBefore(sunrise)) return 0.0;
+    if (now.isAfter(sunset)) return 1.0;
+    final total = sunset.difference(sunrise).inMinutes;
+    final elapsed = now.difference(sunrise).inMinutes;
+    return (elapsed / total).clamp(0.0, 1.0);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 1200));
+    _progressAnim = CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic);
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (mounted) _controller.animateTo(_getSunProgress());
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  String _formatTime(String time) {
+    final parts = time.split(':');
+    final hour = int.parse(parts[0]);
+    final minute = parts[1];
+    if (hour == 0) return '오전 12:$minute AM';
+    if (hour < 12) return '오전 $hour:$minute AM';
+    if (hour == 12) return '오후 12:$minute PM';
+    return '오후 ${hour - 12}:$minute PM';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10)],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.wb_twilight, color: Color(0xFFFFAB40), size: 20),
+              SizedBox(width: 8),
+              Text('일출 / 일몰', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: AppTheme.textPrimary)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          AnimatedBuilder(
+            animation: _progressAnim,
+            builder: (context, _) {
+              return LayoutBuilder(
+                builder: (context, constraints) {
+                  return SizedBox(
+                    height: 100,
+                    width: constraints.maxWidth,
+                    child: CustomPaint(
+                      painter: SunArcPainter(progress: _progressAnim.value),
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _buildTimeInfo(Icons.wb_sunny, '일출', _formatTime(widget.sunriseTime), const Color(0xFFFF8F00)),
+              _buildTimeInfo(Icons.nightlight_round, '일몰', _formatTime(widget.sunsetTime), const Color(0xFF5C6BC0)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTimeInfo(IconData icon, String label, String time, Color color) {
+    return Row(
+      children: [
+        Icon(icon, color: color, size: 18),
+        const SizedBox(width: 6),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+            Text(time, style: TextStyle(fontWeight: FontWeight.w700, color: color, fontSize: 13)),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class SunArcPainter extends CustomPainter {
+  final double progress;
+  SunArcPainter({required this.progress});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // ✅ 캔버스 범위 밖으로 그리지 않도록 클리핑
+    canvas.clipRect(Rect.fromLTWH(0, 0, size.width, size.height));
+
+    final cx = size.width / 2;
+    final cy = size.height; // 바닥에 중심 배치
+    final radius = size.width * 0.42;
+
+    // ✅ 점선 호 배경 - 정확히 π(180°)만 그리기
+    final bgPaint = Paint()
+      ..color = Colors.grey.shade200
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5
+      ..strokeCap = StrokeCap.round;
+    _drawDashedArc(canvas, cx, cy, radius, bgPaint);
+
+    // 진행 호 (그라데이션) - 좌→우 (π → 0 방향)
+    if (progress > 0) {
+      final progressPaint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.5
+        ..strokeCap = StrokeCap.round
+        ..shader = const LinearGradient(
+          colors: [Color(0xFFFFB300), Color(0xFFFF8F00)],
+        ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+
+      // math.pi(왼쪽)에서 시작, -math.pi*progress로 반시계(위쪽 통과) 이동
+      canvas.drawArc(
+        Rect.fromCircle(center: Offset(cx, cy), radius: radius),
+        math.pi,
+        -math.pi * progress,
+        false,
+        progressPaint,
+      );
+    }
+
+    // 지평선
+    canvas.drawLine(
+      Offset(cx - radius - 8, cy),
+      Offset(cx + radius + 8, cy),
+      Paint()..color = Colors.grey.shade300..strokeWidth = 1.0,
+    );
+
+    // 태양 위치 계산 (반시계 방향: π → 0)
+    final angle = math.pi - math.pi * progress;
+    final sunX = cx + radius * math.cos(angle);
+    final sunY = cy + radius * math.sin(angle);
+
+    // 태양 글로우
+    canvas.drawCircle(Offset(sunX, sunY), 16,
+        Paint()..color = const Color(0xFFFFD54F).withValues(alpha: 0.3)
+             ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8));
+    // 외곽
+    canvas.drawCircle(Offset(sunX, sunY), 12, Paint()..color = const Color(0xFFFFF9C4));
+    // 중간
+    canvas.drawCircle(Offset(sunX, sunY), 8,  Paint()..color = const Color(0xFFFFB300));
+    // 핵
+    canvas.drawCircle(Offset(sunX, sunY), 4,  Paint()..color = const Color(0xFFFF8F00));
+
+    // 일출 점 (왼쪽)
+    _drawEndDot(canvas, cx - radius, cy, const Color(0xFFFFB300));
+    // 일몰 점 (오른쪽)
+    _drawEndDot(canvas, cx + radius, cy, const Color(0xFF7986CB));
+  }
+
+  void _drawEndDot(Canvas canvas, double x, double y, Color color) {
+    canvas.drawCircle(Offset(x, y), 5, Paint()..color = color);
+    canvas.drawCircle(Offset(x, y), 5,
+        Paint()..color = Colors.white..style = PaintingStyle.stroke..strokeWidth = 1.5);
+  }
+
+  /// ✅ 정확히 π(180°)만 점선으로 그리기
+  void _drawDashedArc(Canvas canvas, double cx, double cy, double r, Paint paint) {
+    const int n = 36;                             // 점선 개수
+    const double totalAngle = math.pi;            // 정확히 반원(180°)
+    const double dashRatio = 0.6;                 // 대시 비율
+    const double segAngle = totalAngle / n;       // 각 세그먼트 각도
+    const double dashAngle = segAngle * dashRatio;
+
+    for (int i = 0; i < n; i++) {
+      final startAngle = math.pi + i * segAngle;
+      canvas.drawArc(
+        Rect.fromCircle(center: Offset(cx, cy), radius: r),
+        startAngle,
+        dashAngle,
+        false,
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(SunArcPainter old) => old.progress != progress;
+}
+
+
+/// 달 위상 카드
+class MoonPhaseCard extends StatelessWidget {
+  final String phaseName; // "상현달"
+  final String moonrise;  // "오후 12:44"
+  final String moonset;   // "오전 02:18"
+  final double phaseValue; // 0.0~1.0
+
+  const MoonPhaseCard({
+    super.key,
+    required this.phaseName,
+    required this.moonrise,
+    required this.moonset,
+    required this.phaseValue,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10)],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.nightlight, color: Color(0xFF90A4AE), size: 20),
+              SizedBox(width: 8),
+              Text('달 위상', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: AppTheme.textPrimary)),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              CustomPaint(
+                size: const Size(72, 72),
+                painter: MoonPhasePainter(phase: phaseValue),
+              ),
+              const SizedBox(width: 20),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(phaseName, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
+                    const SizedBox(height: 14),
+                    _buildMoonTime(Icons.arrow_upward_rounded, '월출', moonrise, const Color(0xFFFFB300)),
+                    const SizedBox(height: 8),
+                    _buildMoonTime(Icons.arrow_downward_rounded, '월몰', moonset, const Color(0xFF90A4AE)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMoonTime(IconData icon, String label, String time, Color color) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(6)),
+          child: Icon(icon, size: 14, color: color),
+        ),
+        const SizedBox(width: 8),
+        Text('$label  ', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+        Text(time, style: TextStyle(fontWeight: FontWeight.w700, color: color, fontSize: 13)),
+      ],
+    );
+  }
+}
+
+class MoonPhasePainter extends CustomPainter {
+  final double phase; // 0.0~1.0
+
+  MoonPhasePainter({required this.phase});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2 - 2;
+
+    // 달 밝은 면 (전체 원)
+    canvas.drawCircle(center, radius, Paint()..color = const Color(0xFFECEFF1));
+
+    // 위상 그림자 마스크
+    canvas.save();
+    canvas.clipPath(Path()..addOval(Rect.fromCircle(center: center, radius: radius)));
+
+    final shadowPaint = Paint()
+      ..color = const Color(0xFF546E7A).withValues(alpha: 0.9);
+
+    // phase: 0=삭(어두움), 0.25=상현(오른쪽 밝음), 0.5=보름(밝음), 0.75=하현(왼쪽 밝음)
+    if (phase < 0.5) {
+      // 오른쪽이 점점 밝아짐
+      final xOffset = radius - (phase / 0.5) * 2 * radius;
+      final shadowPath = Path()
+        ..addArc(Rect.fromCircle(center: center, radius: radius), math.pi / 2, math.pi);
+      if (xOffset > 0) {
+        shadowPath.addOval(Rect.fromCenter(center: center, width: xOffset * 2, height: radius * 2));
+      }
+      canvas.drawPath(shadowPath, shadowPaint);
+      if (xOffset < 0) {
+        canvas.drawOval(
+          Rect.fromCenter(center: center, width: xOffset.abs() * 2, height: radius * 2),
+          Paint()..color = const Color(0xFFECEFF1),
+        );
+      }
+    } else {
+      // 왼쪽이 점점 밝아짐 (하현)
+      final xOffset = ((phase - 0.5) / 0.5) * 2 * radius - radius;
+      final shadowPath = Path()
+        ..addArc(Rect.fromCircle(center: center, radius: radius), -math.pi / 2, math.pi);
+      canvas.drawPath(shadowPath, shadowPaint);
+      if (xOffset > 0) {
+        canvas.drawOval(
+          Rect.fromCenter(center: center, width: xOffset * 2, height: radius * 2),
+          shadowPaint,
+        );
+      } else {
+        canvas.drawOval(
+          Rect.fromCenter(center: center, width: xOffset.abs() * 2, height: radius * 2),
+          Paint()..color = const Color(0xFFECEFF1),
+        );
+      }
+    }
+
+    canvas.restore();
+
+    // 크레이터
+    _drawCrater(canvas, center + const Offset(-10, -8), 4);
+    _drawCrater(canvas, center + const Offset(8, 6), 6);
+    _drawCrater(canvas, center + const Offset(-4, 12), 3);
+
+    // 테두리
+    canvas.drawCircle(center, radius,
+        Paint()..color = Colors.blueGrey.shade200..style = PaintingStyle.stroke..strokeWidth = 1.5);
+  }
+
+  void _drawCrater(Canvas canvas, Offset pos, double r) {
+    canvas.drawCircle(pos, r, Paint()..color = Colors.blueGrey.shade100);
+    canvas.drawCircle(pos, r, Paint()..color = Colors.blueGrey.shade200..style = PaintingStyle.stroke..strokeWidth = 0.5);
+  }
+
+  @override
+  bool shouldRepaint(MoonPhasePainter old) => old.phase != phase;
+}

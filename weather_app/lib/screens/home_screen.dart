@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../models/weather_model.dart';
 import '../services/weather_service.dart';
+import '../services/location_service.dart';
+import '../widgets/animated_weather_icon.dart';
+import '../widgets/sun_moon_widgets.dart';
 import 'air_quality_screen.dart';
 import 'outfit_screen.dart';
 import 'settings_screen.dart';
@@ -16,9 +19,12 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
   final WeatherService _service = WeatherService();
+  final LocationService _locationService = LocationService();
 
   bool _isLoading = true;
   String _errorMessage = '';
+  String _dongName = '역삼동';        // 표시할 동 이름
+  bool _isLocating = true;            // GPS 찾는 중
 
   List<WeatherForecast> _forecasts = [];
   List<HourlyWeatherData> _hourlyData = [];
@@ -31,14 +37,28 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _loadWeatherData();
+    _initLocationAndWeather();
   }
 
-  Future<void> _loadWeatherData() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = '';
-    });
+  Future<void> _initLocationAndWeather() async {
+    // GPS 위치 먼저
+    final loc = await _locationService.getCurrentLocation();
+    if (loc != null) {
+      _service.setGrid(loc.nx, loc.ny);
+      if (mounted) setState(() => _dongName = loc.dongName);
+    }
+    setState(() => _isLocating = false);
+    await _loadWeatherData();
+  }
+
+
+  Future<void> _loadWeatherData({bool isRefresh = false}) async {
+    if (!isRefresh) {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = '';
+      });
+    }
     try {
       final forecasts = await _service.fetchForecast();
       final dressing = await _service.fetchDressingIndex();
@@ -53,6 +73,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _maxTemp = minMax['max'] ?? 0;
         _minTemp = minMax['min'] ?? 0;
         _isLoading = false;
+        _errorMessage = '';
       });
     } catch (e) {
       setState(() {
@@ -62,6 +83,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -70,8 +92,11 @@ class _HomeScreenState extends State<HomeScreen> {
         child: _isLoading
             ? _buildLoadingView()
             : RefreshIndicator(
-                onRefresh: _loadWeatherData,
+                onRefresh: () => _loadWeatherData(isRefresh: true),
                 color: AppTheme.primaryColor,
+                backgroundColor: Colors.white,
+                strokeWidth: 2.5,
+                displacement: 20,
                 child: SingleChildScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
                   child: Padding(
@@ -95,6 +120,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           _buildWeeklyForecast(),
                           const SizedBox(height: 16),
                           _buildSunriseSunset(),
+                          const SizedBox(height: 16),
+                          _buildMoonPhase(),
                         ],
                         const SizedBox(height: 80),
                       ],
@@ -159,12 +186,26 @@ class _HomeScreenState extends State<HomeScreen> {
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Row(
+            Row(
               children: [
-                Icon(Icons.location_on, color: AppTheme.primaryColor, size: 18),
-                SizedBox(width: 4),
-                Text('서울특별시 강남구', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
-                Icon(Icons.keyboard_arrow_down, color: AppTheme.textSecondary),
+                Icon(
+                  _isLocating ? Icons.gps_not_fixed : Icons.location_on,
+                  color: AppTheme.primaryColor, size: 16,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  _dongName,
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
+                ),
+                if (_isLocating)
+                  const Padding(
+                    padding: EdgeInsets.only(left: 6),
+                    child: SizedBox(width: 12, height: 12,
+                      child: CircularProgressIndicator(strokeWidth: 1.5, color: AppTheme.primaryColor),
+                    ),
+                  ),
+                if (!_isLocating)
+                  const Icon(Icons.keyboard_arrow_down, color: AppTheme.textSecondary),
               ],
             ),
             const SizedBox(height: 2),
@@ -233,7 +274,11 @@ class _HomeScreenState extends State<HomeScreen> {
                         Text('최고 ${_maxTemp.round()}° / 최저 ${_minTemp.round()}°', style: const TextStyle(color: Colors.white70, fontSize: 14)),
                       ],
                     ),
-                    Text(current?.weatherIcon ?? '☀️', style: const TextStyle(fontSize: 72)),
+                    AnimatedWeatherIcon(
+                      weatherIcon: current?.weatherIcon ?? '☀️',
+                      pty: current?.pty ?? 0,
+                      sky: current?.sky ?? 1,
+                    ),
                   ],
                 ),
                 const SizedBox(height: 20),
@@ -449,35 +494,18 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildSunriseSunset() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(colors: [Color(0xFFFFF3DC), Color(0xFFFFE0B2)]),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Row(
-            children: [
-              Icon(Icons.wb_twilight, color: Color(0xFFE65100)),
-              SizedBox(width: 6),
-              Text('일출 / 일몰', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: Color(0xFF4E342E))),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _buildSunItem(Icons.wb_sunny, '일출', '07:12 AM', const Color(0xFFFF6F00)),
-              Container(height: 50, width: 1, color: Colors.orange.shade200),
-              _buildSunItem(Icons.bedtime, '일몰', '18:14 PM', const Color(0xFF5C6BC0)),
-              Container(height: 50, width: 1, color: Colors.orange.shade200),
-              _buildSunItem(Icons.nightlight, '달 위상', '상현달', const Color(0xFF546E7A)),
-            ],
-          ),
-        ],
-      ),
+    return const SunriseSunsetCard(
+      sunriseTime: '07:12',
+      sunsetTime: '18:14',
+    );
+  }
+
+  Widget _buildMoonPhase() {
+    return const MoonPhaseCard(
+      phaseName: '상현달',
+      moonrise: '오후 12:44',
+      moonset: '오전 02:18',
+      phaseValue: 0.25,
     );
   }
 
