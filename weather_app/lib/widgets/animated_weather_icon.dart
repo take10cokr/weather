@@ -117,7 +117,7 @@ class _AnimatedWeatherIconState extends State<AnimatedWeatherIcon>
                 left: s * 0.1,
                 child: CustomPaint(
                   size: Size(s * 0.65, s * 0.65),
-                  painter: _SunPainter(color: const Color(0xFF64B5F6)),
+                  painter: _SunPainter(color: const Color(0xFFFFD54F)),
                 ),
               ),
               // 앞에 구름 (부유)
@@ -234,7 +234,7 @@ class _AnimatedWeatherIconState extends State<AnimatedWeatherIcon>
 // ───────── 태양 ─────────
 class _SunPainter extends CustomPainter {
   final Color color;
-  _SunPainter({this.color = const Color(0xFF1E88E5)});
+  _SunPainter({this.color = const Color(0xFFFFD54F)});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -242,15 +242,26 @@ class _SunPainter extends CustomPainter {
     final cy = size.height / 2;
     final r = math.min(cx, cy);
 
+    // 글로우 효과 (밝은 노란 빛)
+    canvas.drawCircle(
+      Offset(cx, cy), r * 0.55,
+      Paint()
+        ..color = color.withValues(alpha: 0.25)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10),
+    );
+
     final circlePaint = Paint()..color = color..style = PaintingStyle.fill;
     final rayPaint = Paint()
-      ..color = color
+      ..color = Colors.white.withValues(alpha: 0.9)
       ..style = PaintingStyle.stroke
       ..strokeWidth = r * 0.13
       ..strokeCap = StrokeCap.round;
 
     // 중심 원
     canvas.drawCircle(Offset(cx, cy), r * 0.38, circlePaint);
+    // 중심 하이라이트
+    canvas.drawCircle(Offset(cx - r * 0.08, cy - r * 0.08), r * 0.15,
+      Paint()..color = Colors.white.withValues(alpha: 0.4));
 
     // 광선 8개 (짧고 굵은 직선)
     for (int i = 0; i < 8; i++) {

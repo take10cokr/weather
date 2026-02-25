@@ -180,6 +180,18 @@ class _HomeScreenState extends State<HomeScreen> {
     final weekDays = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
     final dateStr = '${now.month}월 ${now.day}일 ${weekDays[now.weekday % 7]}';
 
+    // 동/읍/면/리 단위만 추출
+    String displayName = _dongName;
+    final suffixes = ['동', '읍', '면', '리'];
+    // "역삼1동" → "역삼1동", "강남구" → 그대로 표시
+    final parts = _dongName.split(' ');
+    for (final part in parts.reversed) {
+      if (suffixes.any((s) => part.endsWith(s))) {
+        displayName = part;
+        break;
+      }
+    }
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -194,7 +206,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 const SizedBox(width: 4),
                 Text(
-                  _dongName,
+                  displayName,
                   style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
                 ),
                 if (_isLocating)
@@ -212,16 +224,69 @@ class _HomeScreenState extends State<HomeScreen> {
             Text(dateStr, style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
           ],
         ),
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            shape: BoxShape.circle,
-            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 8, offset: const Offset(0, 2))],
-          ),
-          child: IconButton(
-            icon: const Icon(Icons.refresh, color: AppTheme.primaryColor),
-            onPressed: _loadWeatherData,
-          ),
+        Row(
+          children: [
+            // 새로고침 버튼
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 8, offset: const Offset(0, 2))],
+              ),
+              child: IconButton(
+                icon: const Icon(Icons.refresh, color: AppTheme.primaryColor, size: 22),
+                onPressed: _loadWeatherData,
+                padding: const EdgeInsets.all(8),
+                constraints: const BoxConstraints(),
+              ),
+            ),
+            const SizedBox(width: 8),
+            // 햄버거 메뉴 버튼
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 8, offset: const Offset(0, 2))],
+              ),
+              child: PopupMenuButton<String>(
+                icon: const Icon(Icons.menu, color: AppTheme.primaryColor, size: 22),
+                padding: const EdgeInsets.all(8),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                elevation: 8,
+                offset: const Offset(0, 48),
+                onSelected: (value) {
+                  if (value == 'settings') {
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
+                  } else if (value == 'location') {
+                    // 위치설정 - 현재는 위치 새로고침
+                    _initLocationAndWeather();
+                  }
+                },
+                itemBuilder: (_) => [
+                  const PopupMenuItem(
+                    value: 'settings',
+                    child: Row(
+                      children: [
+                        Icon(Icons.settings_rounded, color: AppTheme.textSecondary, size: 20),
+                        SizedBox(width: 12),
+                        Text('설정', style: TextStyle(fontWeight: FontWeight.w500)),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'location',
+                    child: Row(
+                      children: [
+                        Icon(Icons.location_on_outlined, color: AppTheme.textSecondary, size: 20),
+                        SizedBox(width: 12),
+                        Text('위치설정', style: TextStyle(fontWeight: FontWeight.w500)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -347,8 +412,22 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildHourlyForecast() {
+    // 표시할 데이터 (최대 7개)
+    final displayData = _hourlyData.length > 7 ? _hourlyData.sublist(0, 7) : _hourlyData;
+
+    // 시간 포맷 변환 (ex: "14:00" -> "오후 2시")
+    String formatTimeLabel(String time) {
+      final parts = time.split(':');
+      if (parts.isEmpty) return time;
+      final hour = int.tryParse(parts[0]) ?? 0;
+      if (hour == 0) return '오전\n12시';
+      if (hour < 12) return '오전\n${hour}시';
+      if (hour == 12) return '오후\n12시';
+      return '오후\n${hour - 12}시';
+    }
+
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -357,42 +436,43 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          // 헤더: 타이틀 + 오늘 (24H) 탭
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Icon(Icons.schedule, color: AppTheme.primaryColor, size: 18),
-              SizedBox(width: 6),
-              Text('시간별 기온 추이', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: AppTheme.textPrimary)),
+              const Row(
+                children: [
+                  Icon(Icons.schedule, color: AppTheme.primaryColor, size: 18),
+                  SizedBox(width: 6),
+                  Text('시간별 기온 추이', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: AppTheme.textPrimary)),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Text('오늘 (24H)', style: TextStyle(color: AppTheme.primaryColor, fontSize: 11, fontWeight: FontWeight.w600)),
+              ),
             ],
           ),
-          const SizedBox(height: 16),
-          _hourlyData.isEmpty
-              ? const Center(child: Text('데이터 없음', style: TextStyle(color: AppTheme.textSecondary)))
+          const SizedBox(height: 12),
+          // 곡선 차트 + 온도/시간 라벨 통합
+          displayData.isEmpty
+              ? const Center(child: Padding(
+                  padding: EdgeInsets.all(20),
+                  child: Text('데이터 없음', style: TextStyle(color: AppTheme.textSecondary)),
+                ))
               : SizedBox(
-                  height: 110,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: _hourlyData.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 12),
-                    itemBuilder: (context, index) {
-                      final item = _hourlyData[index];
-                      final isNow = index == 0;
-                      return Container(
-                        width: 64,
-                        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
-                        decoration: BoxDecoration(
-                          color: isNow ? AppTheme.primaryColor : Colors.transparent,
-                          borderRadius: BorderRadius.circular(30),
-                          border: isNow ? null : Border.all(color: Colors.grey.shade200),
-                        ),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: [
-                            Text(item.time, style: TextStyle(fontSize: 10, color: isNow ? Colors.white70 : AppTheme.textSecondary), textAlign: TextAlign.center),
-                            Text(item.weatherIcon, style: const TextStyle(fontSize: 22)),
-                            Text('${item.temp.round()}°', style: TextStyle(fontWeight: FontWeight.w700, color: isNow ? Colors.white : AppTheme.textPrimary, fontSize: 15)),
-                            if (item.pop > 0)
-                              Text('${item.pop}%', style: TextStyle(fontSize: 9, color: isNow ? Colors.lightBlue[100] : Colors.blue)),
-                          ],
+                  height: 160,
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      return CustomPaint(
+                        size: Size(constraints.maxWidth, 160),
+                        painter: _HourlyChartPainter(
+                          data: displayData,
+                          formatTimeLabel: formatTimeLabel,
                         ),
                       );
                     },
@@ -549,5 +629,136 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
     );
+  }
+}
+
+/// 시간별 기온 추이 곡선 차트 페인터
+class _HourlyChartPainter extends CustomPainter {
+  final List<HourlyWeatherData> data;
+  final String Function(String) formatTimeLabel;
+
+  _HourlyChartPainter({required this.data, required this.formatTimeLabel});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (data.isEmpty) return;
+
+    const double topPadding = 28;   // 온도 라벨 영역
+    const double bottomPadding = 36; // 시간 라벨 영역
+    const double sidePadding = 24;
+
+    final chartTop = topPadding;
+    final chartBottom = size.height - bottomPadding;
+    final chartHeight = chartBottom - chartTop;
+    final chartWidth = size.width - sidePadding * 2;
+
+    // 최대/최소 온도 계산
+    final temps = data.map((e) => e.temp).toList();
+    final maxTemp = temps.reduce((a, b) => a > b ? a : b);
+    final minTemp = temps.reduce((a, b) => a < b ? a : b);
+    final tempRange = (maxTemp - minTemp).abs();
+    final effectiveRange = tempRange < 1 ? 1.0 : tempRange;
+
+    // 각 데이터 포인트 좌표 계산
+    final points = <Offset>[];
+    for (int i = 0; i < data.length; i++) {
+      final x = sidePadding + (chartWidth / (data.length - 1)) * i;
+      final normalizedTemp = (data[i].temp - minTemp) / effectiveRange;
+      final y = chartBottom - normalizedTemp * chartHeight;
+      points.add(Offset(x, y));
+    }
+
+    // 부드러운 곡선 경로 생성 (Catmull-Rom → Cubic Bezier)
+    final linePath = Path();
+    linePath.moveTo(points[0].dx, points[0].dy);
+
+    for (int i = 0; i < points.length - 1; i++) {
+      final p0 = i > 0 ? points[i - 1] : points[i];
+      final p1 = points[i];
+      final p2 = points[i + 1];
+      final p3 = i + 2 < points.length ? points[i + 2] : points[i + 1];
+
+      final cp1x = p1.dx + (p2.dx - p0.dx) / 6;
+      final cp1y = p1.dy + (p2.dy - p0.dy) / 6;
+      final cp2x = p2.dx - (p3.dx - p1.dx) / 6;
+      final cp2y = p2.dy - (p3.dy - p1.dy) / 6;
+
+      linePath.cubicTo(cp1x, cp1y, cp2x, cp2y, p2.dx, p2.dy);
+    }
+
+    // 그래디언트 채우기 경로
+    final fillPath = Path.from(linePath);
+    fillPath.lineTo(points.last.dx, chartBottom);
+    fillPath.lineTo(points.first.dx, chartBottom);
+    fillPath.close();
+
+    // 그래디언트 채우기
+    final fillPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          const Color(0xFF4A9FF5).withValues(alpha: 0.3),
+          const Color(0xFF4A9FF5).withValues(alpha: 0.05),
+          const Color(0xFF4A9FF5).withValues(alpha: 0.0),
+        ],
+        stops: const [0.0, 0.6, 1.0],
+      ).createShader(Rect.fromLTWH(0, chartTop, size.width, chartHeight));
+    canvas.drawPath(fillPath, fillPaint);
+
+    // 곡선 선 그리기
+    final linePaint = Paint()
+      ..color = const Color(0xFF4A9FF5)
+      ..strokeWidth = 2.5
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    canvas.drawPath(linePath, linePaint);
+
+    // 각 포인트에 도트 + 온도 라벨 + 시간 라벨
+    for (int i = 0; i < points.length; i++) {
+      final point = points[i];
+
+      // 도트 (외곽 파랑 + 내부 흰색)
+      canvas.drawCircle(point, 3.5, Paint()..color = const Color(0xFF4A9FF5));
+      canvas.drawCircle(point, 2, Paint()..color = Colors.white);
+
+      // 온도 라벨 (포인트 위)
+      final tempText = TextPainter(
+        text: TextSpan(
+          text: '${data[i].temp.round()}°',
+          style: const TextStyle(
+            color: Color(0xFF333333),
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      );
+      tempText.layout();
+      tempText.paint(canvas, Offset(point.dx - tempText.width / 2, point.dy - tempText.height - 8));
+
+      // 시간 라벨 (차트 하단)
+      final timeLabel = formatTimeLabel(data[i].time);
+      final timeLines = timeLabel.split('\n');
+      double yOffset = chartBottom + 4;
+      for (final line in timeLines) {
+        final timeText = TextPainter(
+          text: TextSpan(
+            text: line,
+            style: const TextStyle(color: Color(0xFF999999), fontSize: 10),
+          ),
+          textDirection: TextDirection.ltr,
+        );
+        timeText.layout();
+        timeText.paint(canvas, Offset(point.dx - timeText.width / 2, yOffset));
+        yOffset += 13;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _HourlyChartPainter oldDelegate) {
+    return oldDelegate.data != data;
   }
 }
