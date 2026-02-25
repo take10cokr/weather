@@ -141,20 +141,21 @@ class SunArcPainter extends CustomPainter {
     final cx = size.width / 2;
     const sunMargin = 20.0; // 태양 아이콘 + 글로우 여유 공간
     final cy = size.height - 6; // 바닥에서 약간 위로
-    // radius를 width와 height 모두 기준으로 제한
-    final maxRadiusByWidth = (size.width - sunMargin * 2) / 2;
-    final maxRadiusByHeight = cy - sunMargin;
-    final radius = math.min(maxRadiusByWidth, maxRadiusByHeight);
 
-    // ✅ 점선 호 배경 - 정확히 π(180°)만 그리기
+    // ✅ 타원 반지름 계산 (완만한 곡선을 위해 rx > ry)
+    final rx = (size.width - sunMargin * 2) / 2;
+    final ry = (cy - sunMargin) * 0.7; // 높이의 70%만 사용하여 완만하게 처리
+    final arcRect = Rect.fromLTRB(cx - rx, cy - ry, cx + rx, cy + ry);
+
+    // ✅ 점선 호 배경 (타원형)
     final bgPaint = Paint()
       ..color = Colors.grey.shade200
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5
       ..strokeCap = StrokeCap.round;
-    _drawDashedArc(canvas, cx, cy, radius, bgPaint);
+    _drawDashedEllipticalArc(canvas, arcRect, bgPaint);
 
-    // 진행 호 (그라데이션) - 좌→우 (π → 0 방향)
+    // 진행 호 (그라데이션) - 타원형
     if (progress > 0) {
       final progressPaint = Paint()
         ..style = PaintingStyle.stroke
@@ -164,9 +165,8 @@ class SunArcPainter extends CustomPainter {
           colors: [Color(0xFFFFB300), Color(0xFFFF8F00)],
         ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
 
-      // math.pi(왼쪽)에서 시작, -math.pi*progress로 반시계(위쪽 통과) 이동
       canvas.drawArc(
-        Rect.fromCircle(center: Offset(cx, cy), radius: radius),
+        arcRect,
         math.pi,
         -math.pi * progress,
         false,
@@ -176,31 +176,52 @@ class SunArcPainter extends CustomPainter {
 
     // 지평선
     canvas.drawLine(
-      Offset(cx - radius - 8, cy),
-      Offset(cx + radius + 8, cy),
+      Offset(cx - rx - 8, cy),
+      Offset(cx + rx + 8, cy),
       Paint()..color = Colors.grey.shade300..strokeWidth = 1.0,
     );
 
-    // 태양 위치 계산 (반시계 방향: π → 0)
+    // 태양 위치 계산 (타원 좌표: x = r * cos, y = r * sin)
     final angle = math.pi - math.pi * progress;
-    final sunX = cx + radius * math.cos(angle);
-    final sunY = cy + radius * math.sin(angle);
+    final sunX = cx + rx * math.cos(angle);
+    final sunY = cy + ry * math.sin(angle);
 
-    // 태양 글로우
-    canvas.drawCircle(Offset(sunX, sunY), 16,
-        Paint()..color = const Color(0xFFFFD54F).withValues(alpha: 0.3)
-             ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8));
-    // 외곽
-    canvas.drawCircle(Offset(sunX, sunY), 12, Paint()..color = const Color(0xFFFFF9C4));
-    // 중간
-    canvas.drawCircle(Offset(sunX, sunY), 8,  Paint()..color = const Color(0xFFFFB300));
-    // 핵
-    canvas.drawCircle(Offset(sunX, sunY), 4,  Paint()..color = const Color(0xFFFF8F00));
+    // 태양 글로우 효과
+    canvas.drawCircle(
+      Offset(sunX, sunY),
+      20,
+      Paint()
+        ..color = const Color(0xFFFFD54F).withValues(alpha: 0.4)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12),
+    );
+
+    // 태양 아이콘 그리기
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: '☀️',
+        style: TextStyle(
+          fontSize: 24,
+          shadows: [
+            Shadow(
+              blurRadius: 10,
+              color: const Color(0xFFFFAB40).withValues(alpha: 0.8),
+              offset: const Offset(0, 0),
+            ),
+          ],
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    );
+    textPainter.layout();
+    textPainter.paint(
+      canvas,
+      Offset(sunX - textPainter.width / 2, sunY - textPainter.height / 2),
+    );
 
     // 일출 점 (왼쪽)
-    _drawEndDot(canvas, cx - radius, cy, const Color(0xFFFFB300));
+    _drawEndDot(canvas, cx - rx, cy, const Color(0xFFFFB300));
     // 일몰 점 (오른쪽)
-    _drawEndDot(canvas, cx + radius, cy, const Color(0xFF7986CB));
+    _drawEndDot(canvas, cx + rx, cy, const Color(0xFF7986CB));
   }
 
   void _drawEndDot(Canvas canvas, double x, double y, Color color) {
@@ -209,23 +230,17 @@ class SunArcPainter extends CustomPainter {
         Paint()..color = Colors.white..style = PaintingStyle.stroke..strokeWidth = 1.5);
   }
 
-  /// ✅ 정확히 π(180°)만 점선으로 그리기
-  void _drawDashedArc(Canvas canvas, double cx, double cy, double r, Paint paint) {
+  /// ✅ 타원형 점선 호 그리기
+  void _drawDashedEllipticalArc(Canvas canvas, Rect rect, Paint paint) {
     const int n = 36;                             // 점선 개수
-    const double totalAngle = math.pi;            // 정확히 반원(180°)
-    const double dashRatio = 0.6;                 // 대시 비율
-    const double segAngle = totalAngle / n;       // 각 세그먼트 각도
+    const double totalAngle = math.pi;            // 180도
+    const double dashRatio = 0.6;
+    const double segAngle = totalAngle / n;
     const double dashAngle = segAngle * dashRatio;
 
     for (int i = 0; i < n; i++) {
       final startAngle = math.pi + i * segAngle;
-      canvas.drawArc(
-        Rect.fromCircle(center: Offset(cx, cy), radius: r),
-        startAngle,
-        dashAngle,
-        false,
-        paint,
-      );
+      canvas.drawArc(rect, startAngle, dashAngle, false, paint);
     }
   }
 

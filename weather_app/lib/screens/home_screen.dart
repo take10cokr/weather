@@ -30,6 +30,7 @@ class _HomeScreenState extends State<HomeScreen> {
   List<HourlyWeatherData> _hourlyData = [];
   List<DailyForecastData> _dailyData = [];
   HourlyWeatherData? _currentWeather;
+  AirQualityData? _airQuality;
   DressingIndex? _dressingIndex;
   double _maxTemp = 0;
   double _minTemp = 0;
@@ -63,6 +64,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final forecasts = await _service.fetchForecast();
       final dressing = await _service.fetchDressingIndex();
       final minMax = _service.getTodayMinMax(forecasts);
+      final airQuality = await _service.fetchAirQuality(_dongName);
 
       setState(() {
         _forecasts = forecasts;
@@ -70,6 +72,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _dailyData = _service.parseDailyForecast(forecasts);
         _currentWeather = _service.getCurrentWeather(forecasts);
         _dressingIndex = dressing;
+        _airQuality = airQuality;
         _maxTemp = minMax['max'] ?? 0;
         _minTemp = minMax['min'] ?? 0;
         _isLoading = false;
@@ -110,6 +113,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           _buildErrorBanner()
                         else ...[
                           _buildMainWeatherCard(),
+                          const SizedBox(height: 16),
+                          _buildAirQualityCard(),
                           const SizedBox(height: 16),
                           if (_dressingIndex != null) _buildDressingCard(),
                           const SizedBox(height: 16),
@@ -374,6 +379,66 @@ class _HomeScreenState extends State<HomeScreen> {
         Text(value, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
         Text(label, style: const TextStyle(color: Colors.white60, fontSize: 11)),
       ],
+    );
+  }
+
+  Widget _buildAirQualityCard() {
+    if (_airQuality == null) return const SizedBox();
+    
+    // PM2.5 기준으로 상태 판단
+    final pm25 = double.tryParse(_airQuality!.pm25) ?? 0;
+    String status = '좋음';
+    Color color = AppTheme.goodAqi;
+    
+    if (pm25 > 75) {
+      status = '매우 나쁨';
+      color = AppTheme.dangerAqi;
+    } else if (pm25 > 35) {
+      status = '나쁨';
+      color = AppTheme.warningAqi;
+    } else if (pm25 > 15) {
+      status = '보통';
+      color = Colors.green;
+    }
+
+    return GestureDetector(
+      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AirQualityScreen())),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: color.withValues(alpha: 0.2)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+              child: const Icon(Icons.air, color: Colors.white, size: 18),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text('현재 미세먼지 농도는 ', style: TextStyle(color: AppTheme.textPrimary.withValues(alpha: 0.7), fontSize: 13)),
+                      Text(status, style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.bold)),
+                      Text(' 입니다', style: TextStyle(color: AppTheme.textPrimary.withValues(alpha: 0.7), fontSize: 13)),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text('통합대기지수: ${_airQuality!.aqi} | 초미세먼지: ${_airQuality!.pm25}μg/m³', 
+                    style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, color: AppTheme.textSecondary, size: 20),
+          ],
+        ),
+      ),
     );
   }
 
