@@ -279,8 +279,8 @@ class WeatherService {
         '&returnType=json'
         '&numOfRows=100'
         '&pageNo=1'
-        '&sidoName=서울' // 일단 서울로 고정, 나중에 지역에 맞춰 변경 가능
-        '&ver=1.0');
+        '&sidoName=서울'
+        '&ver=1.3');
 
     try {
       final response = await http.get(uri).timeout(const Duration(seconds: 10));

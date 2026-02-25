@@ -166,14 +166,19 @@ class AirQualityData {
   });
 
   factory AirQualityData.fromJson(Map<String, dynamic> json) {
+    String getValue(dynamic val) {
+      final s = val?.toString() ?? '0';
+      return (s == '-' || s == 'null' || s.isEmpty) ? '0' : s;
+    }
+
     return AirQualityData(
-      aqi: int.tryParse(json['khaiValue']?.toString() ?? '0') ?? 0,
-      pm25: json['pm25Value']?.toString() ?? '0',
-      pm10: json['pm10Value']?.toString() ?? '0',
-      o3: json['o3Value']?.toString() ?? '0',
-      no2: json['no2Value']?.toString() ?? '0',
-      so2: json['so2Value']?.toString() ?? '0',
-      co: json['coValue']?.toString() ?? '0',
+      aqi: int.tryParse(getValue(json['khaiValue'])) ?? 0,
+      pm25: getValue(json['pm25Value']),
+      pm10: getValue(json['pm10Value']),
+      o3: getValue(json['o3Value']),
+      no2: getValue(json['no2Value']),
+      so2: getValue(json['so2Value']),
+      co: getValue(json['coValue']),
       dataTime: json['dataTime']?.toString() ?? '',
     );
   }

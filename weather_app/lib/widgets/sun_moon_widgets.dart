@@ -89,7 +89,7 @@ class _SunriseSunsetCardState extends State<SunriseSunsetCard>
               return LayoutBuilder(
                 builder: (context, constraints) {
                   return SizedBox(
-                    height: 100,
+                    height: 140,
                     width: constraints.maxWidth,
                     child: CustomPaint(
                       painter: SunArcPainter(progress: _progressAnim.value),
@@ -139,8 +139,12 @@ class SunArcPainter extends CustomPainter {
     canvas.clipRect(Rect.fromLTWH(0, 0, size.width, size.height));
 
     final cx = size.width / 2;
-    final cy = size.height; // 바닥에 중심 배치
-    final radius = size.width * 0.42;
+    const sunMargin = 20.0; // 태양 아이콘 + 글로우 여유 공간
+    final cy = size.height - 6; // 바닥에서 약간 위로
+    // radius를 width와 height 모두 기준으로 제한
+    final maxRadiusByWidth = (size.width - sunMargin * 2) / 2;
+    final maxRadiusByHeight = cy - sunMargin;
+    final radius = math.min(maxRadiusByWidth, maxRadiusByHeight);
 
     // ✅ 점선 호 배경 - 정확히 π(180°)만 그리기
     final bgPaint = Paint()

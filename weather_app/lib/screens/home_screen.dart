@@ -415,15 +415,14 @@ class _HomeScreenState extends State<HomeScreen> {
     // 표시할 데이터 (최대 7개)
     final displayData = _hourlyData.length > 7 ? _hourlyData.sublist(0, 7) : _hourlyData;
 
-    // 시간 포맷 변환 (ex: "14:00" -> "오후 2시")
+    // 시간 포맷 변환 - 이미 '오전 10시', '지금' 등으로 포맷되어 있음
     String formatTimeLabel(String time) {
-      final parts = time.split(':');
-      if (parts.isEmpty) return time;
-      final hour = int.tryParse(parts[0]) ?? 0;
-      if (hour == 0) return '오전\n12시';
-      if (hour < 12) return '오전\n${hour}시';
-      if (hour == 12) return '오후\n12시';
-      return '오후\n${hour - 12}시';
+      if (time == '지금') return '지금';
+      // "오전 10시" → "오전\n10시" 로 줄바꿈 처리
+      if (time.contains(' ')) {
+        return time.replaceFirst(' ', '\n');
+      }
+      return time;
     }
 
     return Container(
