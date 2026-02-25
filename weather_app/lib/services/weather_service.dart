@@ -107,7 +107,7 @@ class WeatherService {
     final futureSlots = sorted.where((t) => t.compareTo(nowStr) >= 0).toList();
     final displaySlots = futureSlots.isNotEmpty ? futureSlots : sorted;
 
-    return displaySlots.take(7).map((time) {
+    return displaySlots.take(24).map((time) {
       final data = grouped[time]!;
       final hour = int.parse(time.substring(0, 2));
       final isNowSlot = hour == now.hour;

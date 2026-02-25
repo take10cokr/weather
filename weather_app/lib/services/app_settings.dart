@@ -29,10 +29,13 @@ extension DustStandardExt on DustStandard {
 
 class AppSettings extends ChangeNotifier {
   static const _keyDustStandard = 'dust_standard';
+  static const _keyInterestItems = 'interest_items';
 
   DustStandard _dustStandard = DustStandard.korean;
+  List<String> _interestItems = ['풍속', '자외선 지수', '가시거리', '습도']; // 기본 4개
 
   DustStandard get dustStandard => _dustStandard;
+  List<String> get interestItems => _interestItems;
 
   /// SharedPreferences에서 설정 불러오기
   Future<void> load() async {
@@ -43,6 +46,12 @@ class AppSettings extends ChangeNotifier {
     } else {
       _dustStandard = DustStandard.korean;
     }
+    
+    final savedItems = prefs.getStringList(_keyInterestItems);
+    if (savedItems != null && savedItems.length == 4) {
+      _interestItems = savedItems;
+    }
+    
     notifyListeners();
   }
 
@@ -52,6 +61,15 @@ class AppSettings extends ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keyDustStandard, standard.name);
+  }
+
+  /// 관심날씨 4개 저장
+  Future<void> setInterestItems(List<String> items) async {
+    if (items.length != 4) return;
+    _interestItems = items;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_keyInterestItems, items);
   }
 
   // ── 기준별 PM2.5 임계값 ──────────────────────────────

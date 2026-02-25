@@ -149,30 +149,11 @@ class SunArcPainter extends CustomPainter {
 
     // ✅ 점선 호 배경 (타원형)
     final bgPaint = Paint()
-      ..color = Colors.grey.shade200
+      ..color = Colors.grey.shade400
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5
       ..strokeCap = StrokeCap.round;
     _drawDashedEllipticalArc(canvas, arcRect, bgPaint);
-
-    // 진행 호 (그라데이션) - 타원형
-    if (progress > 0) {
-      final progressPaint = Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.5
-        ..strokeCap = StrokeCap.round
-        ..shader = const LinearGradient(
-          colors: [Color(0xFFFFB300), Color(0xFFFF8F00)],
-        ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
-
-      canvas.drawArc(
-        arcRect,
-        math.pi,
-        -math.pi * progress,
-        false,
-        progressPaint,
-      );
-    }
 
     // 지평선
     canvas.drawLine(
@@ -181,10 +162,11 @@ class SunArcPainter extends CustomPainter {
       Paint()..color = Colors.grey.shade300..strokeWidth = 1.0,
     );
 
-    // 태양 위치 계산 (타원 좌표: x = r * cos, y = r * sin)
-    final angle = math.pi - math.pi * progress;
-    final sunX = cx + rx * math.cos(angle);
-    final sunY = cy + ry * math.sin(angle);
+    // 태양 위치 계산 (시간 흐름에 맞춰 X축 선형 이동 후 타원 Y 좌표 계산)
+    final sunX = (cx - rx) + (rx * 2) * progress;
+    final nx = (sunX - cx) / rx;
+    final val = 1.0 - (nx * nx);
+    final sunY = cy - ry * math.sqrt(math.max(0.0, val));
 
     // 태양 글로우 효과
     canvas.drawCircle(
