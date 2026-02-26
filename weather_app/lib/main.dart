@@ -4,10 +4,27 @@ import 'screens/home_screen.dart';
 import 'services/app_settings.dart';
 import 'theme/app_theme.dart';
 
+import 'package:permission_handler/permission_handler.dart';
+import 'services/notification_service.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // 알림 서비스 초기화
+  NotificationService.init();
+  
+  // 권한 요청
+  await [
+    Permission.location,
+    Permission.notification,
+  ].request();
+
   final settings = AppSettings();
   await settings.load(); // 저장된 설정 불러오기
+
+  // 알림 서비스 시작 (상단바에 날씨 띄우기!)
+  NotificationService.start();
+
   runApp(
     ChangeNotifierProvider.value(
       value: settings,

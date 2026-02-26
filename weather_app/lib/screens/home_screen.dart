@@ -13,6 +13,7 @@ import 'interest_weather_setting_screen.dart';
 import 'location_setting_screen.dart';
 import 'package:provider/provider.dart';
 import '../services/app_settings.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -52,6 +53,13 @@ class _HomeScreenState extends State<HomeScreen> {
     final loc = await _locationService.getCurrentLocation();
     if (loc != null) {
       _service.setGrid(loc.nx, loc.ny);
+      
+      // 위치 정보 저장 (알림 서비스 공유용)
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('nx', loc.nx);
+      await prefs.setInt('ny', loc.ny);
+      await prefs.setString('current_city', loc.dongName);
+
       if (mounted) setState(() {
         _dongName = loc.dongName;
         _fullAddress = loc.fullAddress;
