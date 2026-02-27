@@ -258,6 +258,52 @@ class WeatherService {
     return null;
   }
 
+  /// 어제 동시간대 기온 조회
+  Future<double?> fetchYesterdayTemp() async {
+    final now = DateTime.now();
+    final yesterday = now.subtract(const Duration(days: 1));
+    final dayBefore = now.subtract(const Duration(days: 2));
+    
+    final yesterdayStr = '${yesterday.year}${yesterday.month.toString().padLeft(2, '0')}${yesterday.day.toString().padLeft(2, '0')}';
+    final dayBeforeStr = '${dayBefore.year}${dayBefore.month.toString().padLeft(2, '0')}${dayBefore.day.toString().padLeft(2, '0')}';
+
+    final uri = Uri.https(
+      'apis.data.go.kr',
+      '/1360000/VilageFcstInfoService_2.0/getVilageFcst',
+      {
+        'serviceKey': _apiKey,
+        'pageNo': '1',
+        'numOfRows': '1000',
+        'dataType': 'JSON',
+        'base_date': dayBeforeStr,
+        'base_time': '2300',
+        'nx': '$_nx',
+        'ny': '$_ny',
+      },
+    );
+
+    try {
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final body = jsonDecode(utf8.decode(response.bodyBytes));
+        final resultCode = body['response']['header']['resultCode'];
+        if (resultCode != '00') return null;
+        
+        final items = body['response']['body']['items']['item'] as List;
+        final targetHour = '${now.hour.toString().padLeft(2, '0')}00';
+        
+        for (var item in items) {
+          if (item['fcstDate'] == yesterdayStr && item['fcstTime'] == targetHour && item['category'] == 'TMP') {
+            return double.tryParse(item['fcstValue']);
+          }
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+    return null;
+  }
+
   /// 습도 가져오기 (현재 시간대)
   double getCurrentHumidity(List<WeatherForecast> forecasts) {
     final current = getCurrentWeather(forecasts);

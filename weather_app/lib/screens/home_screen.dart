@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
+import 'package:geocoding/geocoding.dart';
 import '../theme/app_theme.dart';
 import '../models/weather_model.dart';
 import '../services/weather_service.dart';
@@ -197,6 +198,46 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Future<void> _setLocationFromAddress(String fullAddress) async {
+    setState(() => _isLocating = true);
+    try {
+      final locations = await locationFromAddress(fullAddress);
+      if (locations.isNotEmpty) {
+        final loc = locations.first;
+        final grid = LocationService.latLonToGrid(loc.latitude, loc.longitude);
+        final nx = grid['nx']!;
+        final ny = grid['ny']!;
+        
+        String dongName = fullAddress.split(' ').last;
+
+        _service.setGrid(nx, ny);
+        
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setInt('nx', nx);
+        await prefs.setInt('ny', ny);
+        await prefs.setString('current_city', dongName);
+
+        if (mounted) {
+          setState(() {
+            _dongName = dongName;
+            _fullAddress = fullAddress;
+          });
+          await _loadWeatherData();
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('위치를 찾을 수 없습니다.')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLocating = false);
+      }
+    }
+  }
+
   Widget _buildHeader() {
     final now = DateTime.now();
     final weekDays = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
@@ -204,7 +245,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     // 지역 이름 포맷: 서초구 양재동 (뒤에서 2개 단위)
     String displayName = _dongName;
-    final parts = _dongName.split(' ');
+    final parts = _fullAddress.split(' ');
     if (parts.length >= 2) {
       displayName = '${parts[parts.length - 2]} ${parts[parts.length - 1]}';
     } else if (parts.isNotEmpty) {
@@ -215,15 +256,24 @@ class _HomeScreenState extends State<HomeScreen> {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         GestureDetector(
-          onTap: () {
+          onTap: () async {
             if (!_isLocating) {
-              Navigator.push(context, MaterialPageRoute(
+              final result = await Navigator.push(context, MaterialPageRoute(
                 builder: (_) => LocationSettingScreen(
                   dongName: _dongName,
                   fullAddress: _fullAddress,
                   currentWeather: _currentWeather,
                 ),
               ));
+              
+              if (result != null) {
+                if (result == 'GPS') {
+                  setState(() => _isLocating = true);
+                  _initLocationAndWeather();
+                } else {
+                  _setLocationFromAddress(result as String);
+                }
+              }
             }
           },
           child: Column(
@@ -556,6 +606,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       painter: _HourlyChartPainter(
                         data: displayData,
                         formatTimeLabel: formatTimeLabel,
+                        dayMaxTemp: _maxTemp,
+                        dayMinTemp: _minTemp,
                       ),
                     ),
                   ),
@@ -786,8 +838,15 @@ class _HomeScreenState extends State<HomeScreen> {
 class _HourlyChartPainter extends CustomPainter {
   final List<HourlyWeatherData> data;
   final String Function(String) formatTimeLabel;
+  final double dayMaxTemp;
+  final double dayMinTemp;
 
-  _HourlyChartPainter({required this.data, required this.formatTimeLabel});
+  _HourlyChartPainter({
+    required this.data,
+    required this.formatTimeLabel,
+    required this.dayMaxTemp,
+    required this.dayMinTemp,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -802,18 +861,24 @@ class _HourlyChartPainter extends CustomPainter {
     final chartHeight = chartBottom - chartTop;
     final chartWidth = size.width - sidePadding * 2;
 
-    // 최대/최소 온도 계산
+    // 최대/최소 온도 계산 (현재 차트 데이터 중)
     final temps = data.map((e) => e.temp).toList();
-    final maxTemp = temps.reduce((a, b) => a > b ? a : b);
-    final minTemp = temps.reduce((a, b) => a < b ? a : b);
-    final tempRange = (maxTemp - minTemp).abs();
+    final localMaxTemp = temps.reduce((a, b) => a > b ? a : b);
+    final localMinTemp = temps.reduce((a, b) => a < b ? a : b);
+    
+    // 차트의 전체 Y축 산정 시, 앱 전체의 일일 최고/최저(dayMaxTemp/dayMinTemp)를 기준으로 여백을 포함하여 높이를 제어합니다.
+    // 만약 데이터 중 범위를 벗어나는 값이 있으면 그 값을 우선 적용합니다.
+    final chartMaxTemp = math.max(dayMaxTemp, localMaxTemp);
+    final chartMinTemp = math.min(dayMinTemp, localMinTemp);
+
+    final tempRange = (chartMaxTemp - chartMinTemp).abs();
     final effectiveRange = tempRange < 1 ? 1.0 : tempRange;
 
     // 각 데이터 포인트 좌표 계산
     final points = <Offset>[];
     for (int i = 0; i < data.length; i++) {
       final x = sidePadding + (chartWidth / (data.length - 1)) * i;
-      final normalizedTemp = (data[i].temp - minTemp) / effectiveRange;
+      final normalizedTemp = (data[i].temp - chartMinTemp) / effectiveRange;
       final y = chartBottom - normalizedTemp * chartHeight;
       points.add(Offset(x, y));
     }
