@@ -288,7 +288,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(width: 4),
                   Text(
                     displayName,
-                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
                   ),
                   if (_isLocating)
                     const Padding(
@@ -399,7 +399,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('$temp', style: const TextStyle(color: Colors.white, fontSize: 80, fontWeight: FontWeight.w700, height: 1)),
+                            Text('$temp', style: const TextStyle(color: Colors.white, fontSize: 70, fontWeight: FontWeight.w700, height: 1)),
                             const Padding(padding: EdgeInsets.only(top: 12), child: Text('°C', style: TextStyle(color: Colors.white70, fontSize: 30))),
                           ],
                         ),
@@ -543,8 +543,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildHourlyForecast() {
-    // 표시할 데이터 (최대 24시간)
-    final displayData = _hourlyData.length > 24 ? _hourlyData.sublist(0, 24) : _hourlyData;
+    // 표시할 데이터 (최대 48시간)
+    final displayData = _hourlyData.length > 48 ? _hourlyData.sublist(0, 48) : _hourlyData;
 
     // 시간 포맷 변환 - 이미 '오전 10시', '지금' 등으로 포맷되어 있음
     String formatTimeLabel(String time) {
@@ -583,7 +583,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   color: AppTheme.primaryColor.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: const Text('오늘 (24H)', style: TextStyle(color: AppTheme.primaryColor, fontSize: 11, fontWeight: FontWeight.w600)),
+                child: const Text('48H 예보', style: TextStyle(color: AppTheme.primaryColor, fontSize: 11, fontWeight: FontWeight.w600)),
               ),
             ],
           ),

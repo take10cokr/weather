@@ -83,38 +83,53 @@ class WeatherService {
     return [];
   }
 
-  /// 시간별 날씨 데이터 파싱 (현재 시간 포함 6시간)
+  /// 시간별 날씨 데이터 파싱 (최대 48시간)
   List<HourlyWeatherData> parseHourlyData(List<WeatherForecast> forecasts) {
     final now = DateTime.now();
     final todayStr =
         '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
-    // 현재 시간에서 1시간 전부터 포함 (더 많은 데이터 확보)
-    final cutHour = now.hour > 0 ? now.hour - 1 : 0;
 
     final Map<String, Map<String, String>> grouped = {};
     for (final f in forecasts) {
-      if (f.fcstDate != todayStr) continue;
-      final fHour = int.parse(f.fcstTime.substring(0, 2));
-      if (fHour < cutHour) continue;
-      grouped.putIfAbsent(f.fcstTime, () => {});
-      grouped[f.fcstTime]![f.category] = f.fcstValue;
+      final key = f.fcstDate + f.fcstTime;
+      grouped.putIfAbsent(key, () => {});
+      grouped[key]![f.category] = f.fcstValue;
     }
 
-    // 현재 시간에 가장 가까운 시간 먼저 정렬
-    final sorted = grouped.keys.toList()..sort();
-    // 현재 시간 이후 것만 표시용 (or 가장 최근)
-    final nowStr = now.hour.toString().padLeft(2, '0') + '00';
-    final futureSlots = sorted.where((t) => t.compareTo(nowStr) >= 0).toList();
-    final displaySlots = futureSlots.isNotEmpty ? futureSlots : sorted;
+    // 현재 시간에 가장 가까운 시간부터 정렬
+    final sortedKeys = grouped.keys.toList()..sort();
+    final nowKey = todayStr + now.hour.toString().padLeft(2, '0') + '00';
+    
+    final displayKeys = sortedKeys.where((k) => k.compareTo(nowKey) >= 0).toList();
 
-    return displaySlots.take(24).map((time) {
-      final data = grouped[time]!;
-      final hour = int.parse(time.substring(0, 2));
-      final isNowSlot = hour == now.hour;
+    return displayKeys.take(48).map((key) {
+      final data = grouped[key]!;
+      final fDate = key.substring(0, 8);
+      final fTime = key.substring(8);
+      final hour = int.parse(fTime.substring(0, 2));
+      
+      final isNowSlot = fDate == todayStr && hour == now.hour;
       final ampm = hour < 12 ? '오전' : '오후';
       final displayHour = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
+      
+      String label = isNowSlot ? '지금' : '$ampm ${displayHour}시';
+      
+      // 내일이나 모레인 경우 라벨에 표시
+      if (fDate != todayStr) {
+        final d = DateTime(
+          int.parse(fDate.substring(0, 4)),
+          int.parse(fDate.substring(4, 6)),
+          int.parse(fDate.substring(6, 8)),
+        );
+        final today = DateTime(now.year, now.month, now.day);
+        final diff = d.difference(today).inDays;
+        
+        if (diff == 1) label = '내일 $label';
+        else if (diff == 2) label = '모레 $label';
+      }
+
       return HourlyWeatherData(
-        time: isNowSlot ? '지금' : '$ampm ${displayHour}시',
+        time: label,
         temp: double.tryParse(data['TMP'] ?? '') ?? 0,
         sky: int.tryParse(data['SKY'] ?? '1') ?? 1,
         pty: int.tryParse(data['PTY'] ?? '0') ?? 0,
