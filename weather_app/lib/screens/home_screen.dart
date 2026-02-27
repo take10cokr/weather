@@ -288,7 +288,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(width: 4),
                   Text(
                     displayName,
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
                   ),
                   if (_isLocating)
                     const Padding(
@@ -399,7 +399,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('$temp', style: const TextStyle(color: Colors.white, fontSize: 70, fontWeight: FontWeight.w700, height: 1)),
+                            Text('$temp', style: const TextStyle(color: Colors.white, fontSize: 60, fontWeight: FontWeight.w700, height: 1)),
                             const Padding(padding: EdgeInsets.only(top: 12), child: Text('°C', style: TextStyle(color: Colors.white70, fontSize: 30))),
                           ],
                         ),
@@ -814,7 +814,10 @@ class _HomeScreenState extends State<HomeScreen> {
           setState(() => _selectedIndex = index);
           final dressingAdvice = _dressingIndex?.outfitAdvice ?? '';
           if (index == 1) Navigator.push(context, MaterialPageRoute(builder: (_) => const AirQualityScreen()));
-          if (index == 2) Navigator.push(context, MaterialPageRoute(builder: (_) => OutfitScreen(apiAdvice: dressingAdvice)));
+          if (index == 2) {
+            final currentTemp = _currentWeather?.temp ?? 15.0;
+            Navigator.push(context, MaterialPageRoute(builder: (_) => OutfitScreen(apiAdvice: dressingAdvice, currentTemp: currentTemp)));
+          }
           if (index == 3) Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
         },
         type: BottomNavigationBarType.fixed,

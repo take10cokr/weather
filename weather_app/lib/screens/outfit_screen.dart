@@ -3,7 +3,8 @@ import '../theme/app_theme.dart';
 
 class OutfitScreen extends StatelessWidget {
   final String apiAdvice;
-  const OutfitScreen({super.key, this.apiAdvice = ''});
+  final double currentTemp;
+  const OutfitScreen({super.key, this.apiAdvice = '', this.currentTemp = 15.0});
 
   static const List<OutfitItem> outfits = [
     OutfitItem(temp: '15°C', icon: Icons.dry_cleaning, title: '가벼운 자켓', desc: '약간 쌀쌀할 수 있으니 가벼운 자켓이나 가디건을 걸치는 것을 추천합니다.', tags: ['자켓', '가디건', '긴팔'], color: Color(0xFF1565C0)),
@@ -88,7 +89,7 @@ class OutfitScreen extends StatelessWidget {
                   children: [
                     const Text('가벼운 자켓 + 긴팔', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700)),
                     const SizedBox(height: 6),
-                    const Text('현재 기온 15°C에 최적화된 코디입니다.', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                    Text('현재 기온 ${currentTemp.round()}°C에 최적화된 코디입니다.', style: const TextStyle(color: Colors.white70, fontSize: 13)),
                     const SizedBox(height: 10),
                     Wrap(
                       spacing: 6,

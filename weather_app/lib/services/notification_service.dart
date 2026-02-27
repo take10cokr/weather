@@ -44,9 +44,11 @@ class MyTaskHandler extends TaskHandler {
 
       if (current != null) {
         final now = DateTime.now();
-        final dateStr = '${now.month.toString().padLeft(2, '0')}/${now.day.toString().padLeft(2, '0')} ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+        final ampm = now.hour < 12 ? '오전' : '오후';
+        final displayHour = now.hour == 0 ? 12 : (now.hour > 12 ? now.hour - 12 : now.hour);
+        final timeStr = '$ampm ${displayHour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
         
-        String title = '지금 $cityName 날씨는 ${current.skyStatus} ($dateStr)';
+        String title = '지금 $cityName 날씨 - ${current.skyStatus}    $timeStr';
         String content = '🌡️ 현재 ${current.temp.toStringAsFixed(1)}°';
         
         if (yesterdayTemp != null) {
