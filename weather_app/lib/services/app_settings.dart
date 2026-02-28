@@ -30,12 +30,15 @@ extension DustStandardExt on DustStandard {
 class AppSettings extends ChangeNotifier {
   static const _keyDustStandard = 'dust_standard';
   static const _keyInterestItems = 'interest_items';
+  static const _keyFavoriteLocations = 'favorite_locations';
 
   DustStandard _dustStandard = DustStandard.korean;
   List<String> _interestItems = ['풍속', '자외선 지수', '가시거리', '습도']; // 기본 4개
+  List<String> _favoriteLocations = []; // 즐겨찾기 지역
 
   DustStandard get dustStandard => _dustStandard;
   List<String> get interestItems => _interestItems;
+  List<String> get favoriteLocations => _favoriteLocations;
 
   /// SharedPreferences에서 설정 불러오기
   Future<void> load() async {
@@ -50,6 +53,11 @@ class AppSettings extends ChangeNotifier {
     final savedItems = prefs.getStringList(_keyInterestItems);
     if (savedItems != null && savedItems.length == 4) {
       _interestItems = savedItems;
+    }
+
+    final savedLocations = prefs.getStringList(_keyFavoriteLocations);
+    if (savedLocations != null) {
+      _favoriteLocations = savedLocations;
     }
     
     notifyListeners();
@@ -70,6 +78,18 @@ class AppSettings extends ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList(_keyInterestItems, items);
+  }
+
+  /// 즐겨찾기 지역 추가/제거
+  Future<void> toggleFavoriteLocation(String location) async {
+    if (_favoriteLocations.contains(location)) {
+      _favoriteLocations.remove(location);
+    } else {
+      _favoriteLocations.add(location);
+    }
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_keyFavoriteLocations, _favoriteLocations);
   }
 
   // ── 기준별 PM2.5 임계값 ──────────────────────────────

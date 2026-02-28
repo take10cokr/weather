@@ -6,6 +6,7 @@ import 'theme/app_theme.dart';
 
 import 'package:permission_handler/permission_handler.dart';
 import 'services/notification_service.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -22,8 +23,8 @@ void main() async {
   final settings = AppSettings();
   await settings.load(); // 저장된 설정 불러오기
 
-  // 알림 서비스 시작 (상단바에 날씨 띄우기!)
-  NotificationService.start();
+
+
 
   runApp(
     ChangeNotifierProvider.value(
@@ -42,7 +43,9 @@ class WeatherProApp extends StatelessWidget {
       title: 'WeatherPro',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
-      home: const HomeScreen(),
+      home: const WithForegroundTask(
+        child: HomeScreen(),
+      ),
     );
   }
 }

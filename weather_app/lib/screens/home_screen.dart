@@ -14,6 +14,7 @@ import 'location_setting_screen.dart';
 import 'package:provider/provider.dart';
 import '../services/app_settings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/notification_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -95,6 +96,8 @@ class _HomeScreenState extends State<HomeScreen> {
         _isLoading = false;
         _errorMessage = '';
       });
+      
+      NotificationService.start();
     } catch (e) {
       setState(() {
         _errorMessage = '날씨 정보를 불러올 수 없습니다.';
@@ -204,7 +207,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
     // 지역 이름 포맷: 서초구 양재동 (뒤에서 2개 단위)
     String displayName = _dongName;
-    final parts = _dongName.split(' ');
+    final String addressToSplit = _fullAddress.trim().isEmpty ? _dongName : _fullAddress;
+    final parts = addressToSplit.split(' ').where((s) => s.trim().isNotEmpty).toList();
+    
     if (parts.length >= 2) {
       displayName = '${parts[parts.length - 2]} ${parts[parts.length - 1]}';
     } else if (parts.isNotEmpty) {
@@ -493,8 +498,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildHourlyForecast() {
-    // 표시할 데이터 (최대 24시간)
-    final displayData = _hourlyData.length > 24 ? _hourlyData.sublist(0, 24) : _hourlyData;
+    // 표시할 데이터 (최대 48시간)
+    final displayData = _hourlyData.length > 48 ? _hourlyData.sublist(0, 48) : _hourlyData;
 
     // 시간 포맷 변환 - 이미 '오전 10시', '지금' 등으로 포맷되어 있음
     String formatTimeLabel(String time) {
@@ -533,7 +538,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   color: AppTheme.primaryColor.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: const Text('오늘 (24H)', style: TextStyle(color: AppTheme.primaryColor, fontSize: 11, fontWeight: FontWeight.w600)),
+                child: const Text('48시간', style: TextStyle(color: AppTheme.primaryColor, fontSize: 11, fontWeight: FontWeight.w600)),
               ),
             ],
           ),

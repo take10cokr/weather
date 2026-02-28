@@ -70,9 +70,10 @@ class LocationService {
               : (p.locality ?? '현재위치');
           final parts = [
             p.administrativeArea,
+            p.locality,
             p.subAdministrativeArea,
             p.subLocality,
-          ].where((s) => s != null && s.isNotEmpty).toList();
+          ].where((s) => s != null && s.isNotEmpty).toSet().toList();
           fullAddress = parts.join(' ');
         }
       } catch (_) {

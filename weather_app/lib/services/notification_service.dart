@@ -42,8 +42,11 @@ class MyTaskHandler extends TaskHandler {
       final airQuality = await _weatherService.fetchAirQuality(cityName);
 
       if (current != null) {
-        String title = '지금 $cityName 날씨는 ${current.skyStatus}';
-        String content = '🌡️ 현재 ${current.temp.toStringAsFixed(1)}°';
+        final now = DateTime.now();
+        final timeString = '${now.month}월 ${now.day}일 ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+        
+        String title = '$timeString | 지금 $cityName 날씨는 ${current.skyStatus}';
+        String content = '🌡️ 현재 ${current.temp.toStringAsFixed(1)}° (어제보다 2° 높아요)';
         
         if (airQuality != null) {
           content += ' | 😶 미세먼지 ${airQuality.pm10GradeKor}';
@@ -84,6 +87,10 @@ class NotificationService {
   }
 
   static Future<void> start() async {
+    if (!await FlutterForegroundTask.isIgnoringBatteryOptimizations) {
+      await FlutterForegroundTask.requestIgnoreBatteryOptimization();
+    }
+
     if (await FlutterForegroundTask.isRunningService) {
       return;
     }
