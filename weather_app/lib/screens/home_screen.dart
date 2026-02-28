@@ -43,6 +43,7 @@ class _HomeScreenState extends State<HomeScreen> {
   DressingIndex? _dressingIndex;
   double _maxTemp = 0;
   double _minTemp = 0;
+  double? _yesterdayTemp; // 어제 기온 저장용
 
   @override
   void initState() {
@@ -84,6 +85,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final dressing = await _service.fetchDressingIndex();
       final minMax = _service.getTodayMinMax(forecasts);
       final airQuality = await _service.fetchAirQuality(_dongName);
+      final yesterdayTemp = await _service.fetchYesterdayTemp();
 
       setState(() {
         _forecasts = forecasts;
@@ -94,6 +96,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _airQuality = airQuality;
         _maxTemp = minMax['max'] ?? 0;
         _minTemp = minMax['min'] ?? 0;
+        _yesterdayTemp = yesterdayTemp;
         _isLoading = false;
         _errorMessage = '';
       });
@@ -296,52 +299,142 @@ class _HomeScreenState extends State<HomeScreen> {
     final current = _currentWeather;
     final temp = current?.temp.round() ?? 0;
     final desc = current?.weatherDesc ?? '맑음';
+    final humidity = current?.reh.round() ?? 0;
+    final windSpeed = current?.wsd.toStringAsFixed(1) ?? '0.0';
 
-    return SizedBox(
+    String diffText = '';
+    if (_yesterdayTemp != null && current != null) {
+      final diff = current.temp - _yesterdayTemp!;
+      if (diff.abs() < 0.5) {
+        diffText = '어제와 기온이 비슷해요';
+      } else if (diff > 0) {
+        diffText = '어제보다 ${diff.abs().toStringAsFixed(1).replaceAll('.0', '')}° 높아요';
+      } else {
+        diffText = '어제보다 ${diff.abs().toStringAsFixed(1).replaceAll('.0', '')}° 낮아요';
+      }
+    }
+
+    return Container(
       width: double.infinity,
-      child: Column(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF2196F3), Color(0xFF1976D2)],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF1976D2).withValues(alpha: 0.3),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Stack(
         children: [
-          const SizedBox(height: 20),
-          // 중앙 큰 날씨 아이콘
-          Hero(
-            tag: 'weather_icon',
-            child: AnimatedWeatherIcon(
-              weatherIcon: current?.weatherIcon ?? '☀️',
-              pty: current?.pty ?? 0,
-              sky: current?.sky ?? 1,
-              size: 140, // 크게 키움
+          // 배경 원 포인트
+          Positioned(
+            right: -20,
+            top: -20,
+            child: Container(
+              width: 150,
+              height: 150,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withValues(alpha: 0.1),
+              ),
             ),
           ),
-          const SizedBox(height: 20),
-          // 중앙 큰 온도
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+          Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('$temp', style: const TextStyle(color: Color(0xFF1A1A1A), fontSize: 100, fontWeight: FontWeight.w300, letterSpacing: -5)),
-              const Padding(padding: EdgeInsets.only(top: 18), child: Text('°', style: TextStyle(color: Color(0xFF1A1A1A), fontSize: 60, fontWeight: FontWeight.w300))),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        desc,
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 22,
+                            fontWeight: FontWeight.w600),
+                      ),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '$temp',
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 76,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: -3),
+                          ),
+                          const Padding(
+                            padding: EdgeInsets.only(top: 14, left: 2),
+                            child: Text(
+                              '°C',
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 34,
+                                  fontWeight: FontWeight.w400),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  // 날씨 아이콘
+                  Container(
+                    margin: const EdgeInsets.only(top: 10, right: 10),
+                    child: Hero(
+                      tag: 'weather_icon',
+                      child: AnimatedWeatherIcon(
+                        weatherIcon: current?.weatherIcon ?? '☀️',
+                        pty: current?.pty ?? 0,
+                        sky: current?.sky ?? 1,
+                        size: 90,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              if (diffText.isNotEmpty)
+                Text(
+                  diffText,
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w500),
+                ),
+              const SizedBox(height: 8),
+              Text(
+                '최고 ${_maxTemp.round()}° / 최저 ${_minTemp.round()}°',
+                style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.8),
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500),
+              ),
+              const SizedBox(height: 24),
+              Divider(color: Colors.white.withValues(alpha: 0.2), height: 1),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _buildWeatherStat(Icons.water_drop_outlined, '$humidity%', '습도'),
+                  _buildWeatherStat(Icons.air, '${windSpeed}m/s', '풍속'),
+                  _buildWeatherStat(Icons.thermostat_outlined, '${_maxTemp.round()}°', '최고'),
+                  _buildWeatherStat(Icons.thermostat_outlined, '${_minTemp.round()}°', '최저'),
+                ],
+              ),
             ],
           ),
-          // 날씨 설명 (파란색)
-          Text(
-            desc,
-            style: const TextStyle(color: AppTheme.primaryColor, fontSize: 24, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 12),
-          // 최고/최저 기온
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.arrow_upward_rounded, color: Colors.redAccent, size: 16),
-              const SizedBox(width: 4),
-              Text('최고 ${_maxTemp.round()}°', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 16, fontWeight: FontWeight.w500)),
-              const SizedBox(width: 14),
-              const Icon(Icons.arrow_downward_rounded, color: Colors.blueAccent, size: 16),
-              const SizedBox(width: 4),
-              Text('최저 ${_minTemp.round()}°', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 16, fontWeight: FontWeight.w500)),
-            ],
-          ),
-          const SizedBox(height: 10),
         ],
       ),
     );
