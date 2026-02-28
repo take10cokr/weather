@@ -83,58 +83,53 @@ class WeatherService {
     return [];
   }
 
-  /// 시간별 날씨 데이터 파싱 (현재 시간부터 최대 48시간)
+  /// 시간별 날씨 데이터 파싱 (최대 48시간)
   List<HourlyWeatherData> parseHourlyData(List<WeatherForecast> forecasts) {
     final now = DateTime.now();
-    final nowStr = '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}${now.hour.toString().padLeft(2, '0')}00';
+    final todayStr =
+        '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
 
     final Map<String, Map<String, String>> grouped = {};
     for (final f in forecasts) {
-      final dateTimeKey = '${f.fcstDate}${f.fcstTime}';
-      grouped.putIfAbsent(dateTimeKey, () => {});
-      grouped[dateTimeKey]![f.category] = f.fcstValue;
+      final key = f.fcstDate + f.fcstTime;
+      grouped.putIfAbsent(key, () => {});
+      grouped[key]![f.category] = f.fcstValue;
     }
 
+    // 현재 시간에 가장 가까운 시간부터 정렬
     final sortedKeys = grouped.keys.toList()..sort();
-    final futureSlots = sortedKeys.where((k) => k.compareTo(nowStr) >= 0).toList();
-    final displaySlots = futureSlots.isNotEmpty ? futureSlots : sortedKeys;
+    final nowKey = todayStr + now.hour.toString().padLeft(2, '0') + '00';
+    
+    final displayKeys = sortedKeys.where((k) => k.compareTo(nowKey) >= 0).toList();
 
-    return displaySlots.take(48).map((dateTimeKey) {
-      final data = grouped[dateTimeKey]!;
-      final datePart = dateTimeKey.substring(0, 8);
-      final timePart = dateTimeKey.substring(8, 12);
+    return displayKeys.take(48).map((key) {
+      final data = grouped[key]!;
+      final fDate = key.substring(0, 8);
+      final fTime = key.substring(8);
+      final hour = int.parse(fTime.substring(0, 2));
       
-      final hour = int.parse(timePart.substring(0, 2));
-      final isNowSlot = dateTimeKey == nowStr;
-      
+      final isNowSlot = fDate == todayStr && hour == now.hour;
       final ampm = hour < 12 ? '오전' : '오후';
       final displayHour = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
       
-      String timeLabel;
-      if (isNowSlot) {
-        timeLabel = '지금';
-      } else if (hour == 0) {
-        final itemDate = DateTime(
-          int.parse(datePart.substring(0, 4)),
-          int.parse(datePart.substring(4, 6)),
-          int.parse(datePart.substring(6, 8)),
+      String label = isNowSlot ? '지금' : '$ampm ${displayHour}시';
+      
+      // 내일이나 모레인 경우 라벨에 표시
+      if (fDate != todayStr) {
+        final d = DateTime(
+          int.parse(fDate.substring(0, 4)),
+          int.parse(fDate.substring(4, 6)),
+          int.parse(fDate.substring(6, 8)),
         );
         final today = DateTime(now.year, now.month, now.day);
-        final diff = itemDate.difference(today).inDays;
+        final diff = d.difference(today).inDays;
         
-        if (diff == 1) {
-          timeLabel = '내일';
-        } else if (diff == 2) {
-          timeLabel = '모레';
-        } else {
-          timeLabel = '$ampm ${displayHour}시';
-        }
-      } else {
-        timeLabel = '$ampm ${displayHour}시';
+        if (diff == 1) label = '내일 $label';
+        else if (diff == 2) label = '모레 $label';
       }
 
       return HourlyWeatherData(
-        time: timeLabel,
+        time: label,
         temp: double.tryParse(data['TMP'] ?? '') ?? 0,
         sky: int.tryParse(data['SKY'] ?? '1') ?? 1,
         pty: int.tryParse(data['PTY'] ?? '0') ?? 0,
@@ -274,6 +269,52 @@ class WeatherService {
       }
     } catch (e) {
       // 에러 시 null 반환
+    }
+    return null;
+  }
+
+  /// 어제 동시간대 기온 조회
+  Future<double?> fetchYesterdayTemp() async {
+    final now = DateTime.now();
+    final yesterday = now.subtract(const Duration(days: 1));
+    final dayBefore = now.subtract(const Duration(days: 2));
+    
+    final yesterdayStr = '${yesterday.year}${yesterday.month.toString().padLeft(2, '0')}${yesterday.day.toString().padLeft(2, '0')}';
+    final dayBeforeStr = '${dayBefore.year}${dayBefore.month.toString().padLeft(2, '0')}${dayBefore.day.toString().padLeft(2, '0')}';
+
+    final uri = Uri.https(
+      'apis.data.go.kr',
+      '/1360000/VilageFcstInfoService_2.0/getVilageFcst',
+      {
+        'serviceKey': _apiKey,
+        'pageNo': '1',
+        'numOfRows': '1000',
+        'dataType': 'JSON',
+        'base_date': dayBeforeStr,
+        'base_time': '2300',
+        'nx': '$_nx',
+        'ny': '$_ny',
+      },
+    );
+
+    try {
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final body = jsonDecode(utf8.decode(response.bodyBytes));
+        final resultCode = body['response']['header']['resultCode'];
+        if (resultCode != '00') return null;
+        
+        final items = body['response']['body']['items']['item'] as List;
+        final targetHour = '${now.hour.toString().padLeft(2, '0')}00';
+        
+        for (var item in items) {
+          if (item['fcstDate'] == yesterdayStr && item['fcstTime'] == targetHour && item['category'] == 'TMP') {
+            return double.tryParse(item['fcstValue']);
+          }
+        }
+      }
+    } catch (e) {
+      // ignore
     }
     return null;
   }

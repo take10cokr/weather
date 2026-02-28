@@ -4,6 +4,7 @@ import '../theme/app_theme.dart';
 import '../models/weather_model.dart';
 import '../widgets/animated_weather_icon.dart';
 import '../services/app_settings.dart';
+import '../data/regions.dart';
 
 class LocationSettingScreen extends StatefulWidget {
   final String dongName;
@@ -25,26 +26,6 @@ class _LocationSettingScreenState extends State<LocationSettingScreen> {
   final TextEditingController _searchController = TextEditingController();
   List<String> _filteredLocations = [];
 
-  final List<String> _mockLocations = [
-    '서울특별시 강남구 역삼동',
-    '서울특별시 강남구 삼성동',
-    '서울특별시 서초구 서초동',
-    '서울특별시 서초구 방배동',
-    '경기도 성남시 분당구 정자동',
-    '경기도 성남시 분당구 판교동',
-    '경기도 수원시 영통구 영통동',
-    '경기도 수원시 팔달구 인계동',
-    '인천광역시 연수구 송도동',
-    '인천광역시 부평구 부평동',
-    '부산광역시 해운대구 우동',
-    '부산광역시 수영구 광안동',
-    '대구광역시 수성구 범어동',
-    '광주광역시 서구 치평동',
-    '대전광역시 서구 둔산동',
-    '울산광역시 남구 삼산동',
-    '제주특별자치도 제주시 노형동',
-  ];
-
   @override
   void initState() {
     super.initState();
@@ -55,7 +36,7 @@ class _LocationSettingScreenState extends State<LocationSettingScreen> {
     final query = _searchController.text.trim();
     if (query.isNotEmpty) {
       setState(() {
-        _filteredLocations = _mockLocations
+        _filteredLocations = kKoreaRegions
             .where((loc) => loc.contains(query))
             .toList();
       });

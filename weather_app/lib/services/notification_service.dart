@@ -40,14 +40,28 @@ class MyTaskHandler extends TaskHandler {
       final forecasts = await _weatherService.fetchForecast();
       final current = _weatherService.getCurrentWeather(forecasts);
       final airQuality = await _weatherService.fetchAirQuality(cityName);
+      final yesterdayTemp = await _weatherService.fetchYesterdayTemp();
 
       if (current != null) {
         final now = DateTime.now();
-        final timeString = '${now.month}월 ${now.day}일 ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+        final ampm = now.hour < 12 ? '오전' : '오후';
+        final displayHour = now.hour == 0 ? 12 : (now.hour > 12 ? now.hour - 12 : now.hour);
+        final timeStr = '$ampm ${displayHour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
         
-        String title = '$timeString | 지금 $cityName 날씨는 ${current.skyStatus}';
-        String content = '🌡️ 현재 ${current.temp.toStringAsFixed(1)}° (어제보다 2° 높아요)';
+        String title = '지금 $cityName 날씨 - ${current.skyStatus}    $timeStr';
+        String content = '🌡️ 현재 ${current.temp.toStringAsFixed(1)}°';
         
+        if (yesterdayTemp != null) {
+          final diff = current.temp - yesterdayTemp;
+          if (diff > 0) {
+            content += ' (어제보다 ${diff.toStringAsFixed(1)}° 높아요)';
+          } else if (diff < 0) {
+            content += ' (어제보다 ${diff.abs().toStringAsFixed(1)}° 낮아요)';
+          } else {
+            content += ' (어제와 같아요)';
+          }
+        }
+
         if (airQuality != null) {
           content += ' | 😶 미세먼지 ${airQuality.pm10GradeKor}';
         }
@@ -65,6 +79,7 @@ class MyTaskHandler extends TaskHandler {
 
 class NotificationService {
   static void init() {
+    FlutterForegroundTask.initCommunicationPort();
     FlutterForegroundTask.init(
       androidNotificationOptions: AndroidNotificationOptions(
         channelId: 'weather_notification_channel',
@@ -95,7 +110,14 @@ class NotificationService {
       return;
     }
 
+    final NotificationPermission notificationPermission =
+        await FlutterForegroundTask.checkNotificationPermission();
+    if (notificationPermission != NotificationPermission.granted) {
+      await FlutterForegroundTask.requestNotificationPermission();
+    }
+
     await FlutterForegroundTask.startService(
+      serviceId: 256,
       notificationTitle: '날씨 정보 불러오는 중...',
       notificationText: '잠시만 기다려 주세요.',
       callback: startCallback,
