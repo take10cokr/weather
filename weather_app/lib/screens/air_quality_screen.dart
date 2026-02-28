@@ -25,7 +25,7 @@ class _AirQualityScreenState extends State<AirQualityScreen> {
 
   Future<void> _fetchData() async {
     setState(() => _isLoading = true);
-    final data = await _service.fetchAirQuality('강남구');
+    final data = await _service.fetchAirQuality('서울', '강남구');
     if (mounted) {
       setState(() {
         _data = data;
@@ -107,7 +107,7 @@ class _AirQualityScreenState extends State<AirQualityScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 15, offset: const Offset(0, 5))],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 15, offset: const Offset(0, 5))],
       ),
       child: Column(
         children: [
@@ -184,26 +184,42 @@ class _AirQualityScreenState extends State<AirQualityScreen> {
     if (_data == null) return const SizedBox();
     final settings = context.watch<AppSettings>();
 
-    final p25 = double.tryParse(_data!.pm25) ?? 0;
-    final p10 = double.tryParse(_data!.pm10) ?? 0;
-    final o3v = double.tryParse(_data!.o3) ?? 0;
-    final no2v = double.tryParse(_data!.no2) ?? 0;
-    final so2v = double.tryParse(_data!.so2) ?? 0;
-    final cov = double.tryParse(_data!.co) ?? 0;
+    final p25Str = _data!.pm25;
+    final p10Str = _data!.pm10;
+    final o3Str = _data!.o3;
+    final no2Str = _data!.no2;
+    final so2Str = _data!.so2;
+    final coStr = _data!.co;
+
+    final p25 = double.tryParse(p25Str) ?? -1.0;
+    final p10 = double.tryParse(p10Str) ?? -1.0;
+    final o3v = double.tryParse(o3Str) ?? -1.0;
+    final no2v = double.tryParse(no2Str) ?? -1.0;
+    final so2v = double.tryParse(so2Str) ?? -1.0;
+    final cov = double.tryParse(coStr) ?? -1.0;
 
     String getSimpleStatus(double val, double normal, double bad) {
+       if (val < 0) return '-';
        if (val <= normal) return '좋음';
        if (val <= bad) return '보통';
        return '나쁨';
     }
 
+    Color getStatusColor(String status) {
+        if (status == '-') return Colors.grey;
+        if (status == '좋음') return AppTheme.goodAqi;
+        if (status == '보통') return const Color(0xFFFFEE58);
+        if (status == '나쁨') return AppTheme.warningAqi;
+        return AppTheme.dangerAqi;
+    }
+
     final pollutants = [
-      Pollutant('초미세먼지', _data!.pm25, 'μg/m³', settings.getPm25Status(p25), settings.statusColor(settings.getPm25Status(p25)), 'PM2.5'),
-      Pollutant('미세먼지',  _data!.pm10, 'μg/m³', settings.getPm10Status(p10), settings.statusColor(settings.getPm10Status(p10)), 'PM10'),
-      Pollutant('오존',   _data!.o3,   'ppm',    getSimpleStatus(o3v, 0.03, 0.09), AppTheme.goodAqi, 'O3'),
-      Pollutant('이산화질소',  _data!.no2,  'ppm',    getSimpleStatus(no2v, 0.03, 0.06), AppTheme.warningAqi, 'NO2'),
-      Pollutant('일산화탄소',   _data!.co,   'ppm',    getSimpleStatus(cov, 2.0, 9.0),   AppTheme.goodAqi, 'CO'),
-      Pollutant('아황산가스',  _data!.so2,  'ppm',    getSimpleStatus(so2v, 0.02, 0.05), AppTheme.goodAqi, 'SO2'),
+      Pollutant('초미세먼지', p25Str, 'μg/m³', p25 < 0 ? '-' : settings.getPm25Status(p25), p25 < 0 ? Colors.grey : settings.statusColor(settings.getPm25Status(p25)), 'PM2.5'),
+      Pollutant('미세먼지',  p10Str, 'μg/m³', p10 < 0 ? '-' : settings.getPm10Status(p10), p10 < 0 ? Colors.grey : settings.statusColor(settings.getPm10Status(p10)), 'PM10'),
+      Pollutant('오존',   o3Str,   'ppm',    getSimpleStatus(o3v, 0.03, 0.09), getStatusColor(getSimpleStatus(o3v, 0.03, 0.09)), 'O3'),
+      Pollutant('이산화질소',  no2Str,  'ppm',    getSimpleStatus(no2v, 0.03, 0.06), getStatusColor(getSimpleStatus(no2v, 0.03, 0.06)), 'NO2'),
+      Pollutant('일산화탄소',   coStr,   'ppm',    getSimpleStatus(cov, 2.0, 9.0),   getStatusColor(getSimpleStatus(cov, 2.0, 9.0)), 'CO'),
+      Pollutant('아황산가스',  so2Str,  'ppm',    getSimpleStatus(so2v, 0.02, 0.05), getStatusColor(getSimpleStatus(so2v, 0.02, 0.05)), 'SO2'),
     ];
 
     return GridView.builder(

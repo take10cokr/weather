@@ -332,7 +332,7 @@ class WeatherService {
   }
 
   /// 에어코리아 대기질 실시간 정보 가져오기 (시도별 실시간 측정 데이터)
-  Future<AirQualityData?> fetchAirQuality(String city) async {
+  Future<AirQualityData?> fetchAirQuality(String sidoName, String dongName) async {
     // API 주소: 한국환경공단_에어코리아_대기오염정보
     final uri = Uri.parse(
         'https://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getCtprvnRltmMesureDnsty'
@@ -340,7 +340,7 @@ class WeatherService {
         '&returnType=json'
         '&numOfRows=100'
         '&pageNo=1'
-        '&sidoName=서울'
+        '&sidoName=$sidoName'
         '&ver=1.3');
 
     try {
@@ -349,13 +349,19 @@ class WeatherService {
         final body = jsonDecode(utf8.decode(response.bodyBytes));
         final items = body['response']['body']['items'] as List;
         
-        // 해당 시군구(stationName) 데이터 찾기
-        final item = items.firstWhere(
-            (e) => e['stationName'] == city, 
-            orElse: () => items.first);
+        if (items.isNotEmpty) {
+           // 해당 시군구(stationName) 데이터 찾기
+          Map<String, dynamic>? item;
+          try {
+             item = items.firstWhere((e) => e['stationName'] == dongName);
+          } catch (_) {
+             // 정확한 동 이름이 없으면 첫 번째 측정소 데이터(또는 가장 대표적인 곳)를 사용
+             item = items.first;
+          }
 
-        if (item != null) {
-          return AirQualityData.fromJson(item);
+          if (item != null) {
+            return AirQualityData.fromJson(item);
+          }
         }
       }
     } catch (e) {

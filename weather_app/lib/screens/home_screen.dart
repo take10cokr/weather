@@ -84,7 +84,35 @@ class _HomeScreenState extends State<HomeScreen> {
       final forecasts = await _service.fetchForecast();
       final dressing = await _service.fetchDressingIndex();
       final minMax = _service.getTodayMinMax(forecasts);
-      final airQuality = await _service.fetchAirQuality(_dongName);
+      
+      // Extract sidoName from fullAddress (e.g., "서울특별시 강남구 역삼동" -> "서울")
+      String sidoName = '서울';
+      if (_fullAddress.isNotEmpty) {
+        final parts = _fullAddress.split(' ');
+        if (parts.isNotEmpty) {
+          String rawSido = parts[0];
+          // Map to AirKorea sido names
+          if (rawSido.startsWith('서울')) sidoName = '서울';
+          else if (rawSido.startsWith('부산')) sidoName = '부산';
+          else if (rawSido.startsWith('대구')) sidoName = '대구';
+          else if (rawSido.startsWith('인천')) sidoName = '인천';
+          else if (rawSido.startsWith('광주')) sidoName = '광주';
+          else if (rawSido.startsWith('대전')) sidoName = '대전';
+          else if (rawSido.startsWith('울산')) sidoName = '울산';
+          else if (rawSido.startsWith('경기')) sidoName = '경기';
+          else if (rawSido.startsWith('강원')) sidoName = '강원';
+          else if (rawSido.startsWith('충청북도') || rawSido.startsWith('충북')) sidoName = '충북';
+          else if (rawSido.startsWith('충청남도') || rawSido.startsWith('충남')) sidoName = '충남';
+          else if (rawSido.startsWith('전라북도') || rawSido.startsWith('전북')) sidoName = '전북';
+          else if (rawSido.startsWith('전라남도') || rawSido.startsWith('전남')) sidoName = '전남';
+          else if (rawSido.startsWith('경상북도') || rawSido.startsWith('경북')) sidoName = '경북';
+          else if (rawSido.startsWith('경상남도') || rawSido.startsWith('경남')) sidoName = '경남';
+          else if (rawSido.startsWith('제주')) sidoName = '제주';
+          else if (rawSido.startsWith('세종')) sidoName = '세종';
+        }
+      }
+      
+      final airQuality = await _service.fetchAirQuality(sidoName, _dongName);
       final yesterdayTemp = await _service.fetchYesterdayTemp();
 
       setState(() {

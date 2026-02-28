@@ -167,8 +167,8 @@ class AirQualityData {
 
   factory AirQualityData.fromJson(Map<String, dynamic> json) {
     String getValue(dynamic val) {
-      final s = val?.toString() ?? '0';
-      return (s == '-' || s == 'null' || s.isEmpty) ? '0' : s;
+      final s = val?.toString() ?? '-';
+      return (s == '-' || s == 'null' || s.isEmpty) ? '-' : s;
     }
 
     return AirQualityData(

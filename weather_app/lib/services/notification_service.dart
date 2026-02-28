@@ -39,7 +39,10 @@ class MyTaskHandler extends TaskHandler {
       _weatherService.setGrid(nx, ny);
       final forecasts = await _weatherService.fetchForecast();
       final current = _weatherService.getCurrentWeather(forecasts);
-      final airQuality = await _weatherService.fetchAirQuality(cityName);
+      
+      // Since we don't have sidoName stored in prefs right now easily and want to prevent a crash, rely on dongName fallback we wrote earlier, or save sidoName later. 
+      // For now passing default '서울' as sidoName
+      final airQuality = await _weatherService.fetchAirQuality('서울', cityName);
       final yesterdayTemp = await _weatherService.fetchYesterdayTemp();
 
       if (current != null) {
