@@ -1,7 +1,7 @@
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:http/http.dart' as http;
 import '../models/weather_model.dart';
-
 class WeatherService {
   static const String _apiKey =
       '793622d7dd6ef91e5a86118379a1797c650ee138bfe7a49a04f51ed126aa1338';
@@ -319,6 +319,38 @@ class WeatherService {
     return null;
   }
 
+  /// 체감온도 계산 로직
+  /// 기상청 기준 체감온도 근사치 계산 (여름철 기온-습도 / 겨울철 기온-풍속)
+  double calculateFeelsLike(double temp, {double windSpeed = 0, double humidity = 0}) {
+    // 5월~9월(여름) (기온 20도 이상, 습도 기반) - 보통 열지수(Heat Index)나 체감온도 공식 사용
+    // 10월~4월(겨울) (기온 10도 이하, 풍속 기반) - 체감온도 공식(Wind Chill) 사용
+    // 편의상 기온별로 식을 분리합니다.
+
+    if (temp <= 10.0 && windSpeed > 1.3) {
+      // 겨울철 체감온도 공식 (T_wc)
+      // 13.12 + 0.6215*T - 11.37*V^0.16 + 0.3965*V^0.16*T
+      double vBase = math.pow(windSpeed * 3.6, 0.16).toDouble(); // m/s를 km/h로 변환
+      return 13.12 + (0.6215 * temp) - (11.37 * vBase) + (0.3965 * vBase * temp);
+    } else if (temp >= 20.0 && humidity > 0) {
+      // 여름철 체감온도 근사식 (Steadman) 또는 열지수 관련 공식 사용
+      // 간단한 근사식 (AT) = Ta + 0.33*e - 0.70*ws - 4.0
+      // e = 습도에 따른 수증기압
+      // 더 단순한 버전: (섭씨 온도 기준 썸머 체감온도 근사식)
+      double tw = temp * math.atan(0.151977 * math.pow(humidity + 8.313659, 0.5)) +
+          math.atan(temp + humidity) -
+          math.atan(humidity - 1.676331) +
+          0.00391838 * math.pow(humidity, 1.5) * math.atan(0.023101 * humidity) -
+          4.686035;
+      // 습구온도를 구한 후 열지수를 계산하는 복잡한 식 대신 단순 가중치 사용
+      // 한국 기상청 여름철 체감온도 단순화:
+      // 간단히 기온 + (습도-50) * 0.05 정도로 보정하는 경우도 있음
+      return temp + 0.33 * (humidity / 100.0 * 6.105 * math.exp(17.27 * temp / (237.7 + temp))) - 0.7 * windSpeed - 4.0;
+    }
+
+    // 그 외 일반적인 경우는 현재 기온과 비슷함
+    return temp;
+  }
+
   /// 습도 가져오기 (현재 시간대)
   double getCurrentHumidity(List<WeatherForecast> forecasts) {
     final current = getCurrentWeather(forecasts);
@@ -334,22 +366,29 @@ class WeatherService {
   /// 에어코리아 대기질 실시간 정보 가져오기 (시도별 실시간 측정 데이터)
   Future<AirQualityData?> fetchAirQuality(String sidoName, String dongName) async {
     // API 주소: 한국환경공단_에어코리아_대기오염정보
-    final uri = Uri.parse(
-        'https://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getCtprvnRltmMesureDnsty'
-        '?serviceKey=$_apiKey'
-        '&returnType=json'
-        '&numOfRows=100'
-        '&pageNo=1'
-        '&sidoName=$sidoName'
-        '&ver=1.3');
+    final uri = Uri.https(
+      'apis.data.go.kr',
+      '/B552584/ArpltnInforInqireSvc/getCtprvnRltmMesureDnsty',
+      {
+        'serviceKey': _apiKey,
+        'returnType': 'json',
+        'numOfRows': '100',
+        'pageNo': '1',
+        'sidoName': sidoName,
+        'ver': '1.3',
+      },
+    );
 
     try {
       final response = await http.get(uri).timeout(const Duration(seconds: 10));
       if (response.statusCode == 200) {
-        final body = jsonDecode(utf8.decode(response.bodyBytes));
-        final items = body['response']['body']['items'] as List;
+        final bodyText = response.body;
+        print('fetchAirQuality RESPONSE: $bodyText'); // Debug log
+
+        final body = jsonDecode(bodyText);
+        final items = body['response']?['body']?['items'] as List?;
         
-        if (items.isNotEmpty) {
+        if (items != null && items.isNotEmpty) {
            // 해당 시군구(stationName) 데이터 찾기
           Map<String, dynamic>? item;
           try {
@@ -362,10 +401,15 @@ class WeatherService {
           if (item != null) {
             return AirQualityData.fromJson(item);
           }
+        } else {
+            print('fetchAirQuality items is null or empty. Body: $body');
         }
+      } else {
+        print('fetchAirQuality non-200 status: ${response.statusCode}');
       }
     } catch (e) {
       // 에러 시 null
+      print('fetchAirQuality exception: $e');
     }
     return null;
   }

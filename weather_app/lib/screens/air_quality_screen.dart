@@ -6,7 +6,14 @@ import '../models/weather_model.dart';
 import '../theme/app_theme.dart';
 
 class AirQualityScreen extends StatefulWidget {
-  const AirQualityScreen({super.key});
+  final String sidoName;
+  final String dongName;
+
+  const AirQualityScreen({
+    super.key,
+    required this.sidoName,
+    required this.dongName,
+  });
 
   @override
   State<AirQualityScreen> createState() => _AirQualityScreenState();
@@ -25,7 +32,7 @@ class _AirQualityScreenState extends State<AirQualityScreen> {
 
   Future<void> _fetchData() async {
     setState(() => _isLoading = true);
-    final data = await _service.fetchAirQuality('서울', '강남구');
+    final data = await _service.fetchAirQuality(widget.sidoName, widget.dongName);
     if (mounted) {
       setState(() {
         _data = data;
@@ -47,7 +54,7 @@ class _AirQualityScreenState extends State<AirQualityScreen> {
               children: [
                 const Icon(Icons.location_on, size: 10, color: AppTheme.textSecondary),
                 const SizedBox(width: 2),
-                const Text('서울시 강남구', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary, fontWeight: FontWeight.w500)),
+                Text('${widget.sidoName} ${widget.dongName}', style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary, fontWeight: FontWeight.w500)),
               ],
             ),
           ],
@@ -181,15 +188,14 @@ class _AirQualityScreenState extends State<AirQualityScreen> {
   }
 
   Widget _buildPollutantGrid(BuildContext context) {
-    if (_data == null) return const SizedBox();
     final settings = context.watch<AppSettings>();
 
-    final p25Str = _data!.pm25;
-    final p10Str = _data!.pm10;
-    final o3Str = _data!.o3;
-    final no2Str = _data!.no2;
-    final so2Str = _data!.so2;
-    final coStr = _data!.co;
+    final p25Str = _data?.pm25 ?? '-';
+    final p10Str = _data?.pm10 ?? '-';
+    final o3Str = _data?.o3 ?? '-';
+    final no2Str = _data?.no2 ?? '-';
+    final so2Str = _data?.so2 ?? '-';
+    final coStr = _data?.co ?? '-';
 
     final p25 = double.tryParse(p25Str) ?? -1.0;
     final p10 = double.tryParse(p10Str) ?? -1.0;

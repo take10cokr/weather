@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
 import 'package:geocoding/geocoding.dart';
+import 'package:flutter/services.dart';
 import '../theme/app_theme.dart';
 import '../models/weather_model.dart';
 import '../services/weather_service.dart';
@@ -32,6 +33,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isLoading = true;
   String _errorMessage = '';
   String _dongName = '역삼동';        // 표시할 동 이름
+  String _sidoName = '서울';          // 표시할 시/도 이름
   String _fullAddress = '서울특별시 강남구 역삼동'; // 전체 주소
   bool _isLocating = true;            // GPS 찾는 중
 
@@ -111,8 +113,9 @@ class _HomeScreenState extends State<HomeScreen> {
           else if (rawSido.startsWith('세종')) sidoName = '세종';
         }
       }
+      _sidoName = sidoName;
       
-      final airQuality = await _service.fetchAirQuality(sidoName, _dongName);
+      final airQuality = await _service.fetchAirQuality(_sidoName, _dongName);
       final yesterdayTemp = await _service.fetchYesterdayTemp();
 
       setState(() {
@@ -141,8 +144,53 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final weekDays = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
+    final dateStr = '${now.month}월 ${now.day}일 ${weekDays[now.weekday % 7]}, ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+
+    String displayName = _dongName;
+    final String addressToSplit = _fullAddress.trim().isEmpty ? _dongName : _fullAddress;
+    final parts = addressToSplit.split(' ').where((s) => s.trim().isNotEmpty).toList();
+    
+    if (parts.length >= 2) {
+      displayName = '${parts[parts.length - 2]} ${parts[parts.length - 1]}';
+    }
+
     return Scaffold(
       backgroundColor: Colors.white, // 전체 배경을 흰색으로 변경
+      appBar: AppBar(
+        systemOverlayStyle: SystemUiOverlayStyle.dark.copyWith(
+          statusBarColor: Colors.transparent, // 안드로이드에서 투명하게 처리
+        ),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        centerTitle: true,
+        leading: IconButton(
+          icon: const Icon(Icons.menu, color: AppTheme.textPrimary, size: 28),
+          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen())),
+        ),
+        title: Column(
+          children: [
+            Text(
+              displayName,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppTheme.textPrimary),
+            ),
+            const SizedBox(height: 2),
+            Text(dateStr, style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary, fontWeight: FontWeight.w500)),
+          ],
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.add_location_alt_outlined, color: AppTheme.textPrimary, size: 26),
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => LocationSettingScreen(
+              dongName: _dongName,
+              fullAddress: _fullAddress,
+              currentWeather: _currentWeather,
+            ))),
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
       body: SafeArea(
         child: _isLoading
             ? _buildLoadingView()
@@ -159,8 +207,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _buildHeader(),
-                        const SizedBox(height: 24),
                         if (_errorMessage.isNotEmpty)
                           _buildErrorBanner()
                         else ...[
@@ -273,54 +319,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildHeader() {
-    final now = DateTime.now();
-    final weekDays = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
-    final dateStr = '${now.month}월 ${now.day}일 ${weekDays[now.weekday % 7]}, ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
-
-    String displayName = _dongName;
-    final String addressToSplit = _fullAddress.trim().isEmpty ? _dongName : _fullAddress;
-    final parts = addressToSplit.split(' ').where((s) => s.trim().isNotEmpty).toList();
-    
-    if (parts.length >= 2) {
-      displayName = '${parts[parts.length - 2]} ${parts[parts.length - 1]}';
-    }
-
-    return Stack(
-      alignment: Alignment.center,
-      children: [
-        // 왼쪽 햄버거 메뉴
-        Align(
-          alignment: Alignment.centerLeft,
-          child: IconButton(
-            icon: const Icon(Icons.menu, color: AppTheme.textPrimary, size: 28),
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen())),
-          ),
-        ),
-        // 중앙 지역명 및 날짜
-        Column(
-          children: [
-            Text(
-              displayName,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppTheme.textPrimary),
-            ),
-            const SizedBox(height: 2),
-            Text(dateStr, style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary, fontWeight: FontWeight.w500)),
-          ],
-        ),
-        // 오른쪽 위치 추가 아이콘
-        Align(
-          alignment: Alignment.centerRight,
-          child: IconButton(
-            icon: const Icon(Icons.add_location_alt_outlined, color: AppTheme.textPrimary, size: 26),
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => LocationSettingScreen(
-              dongName: _dongName,
-              fullAddress: _fullAddress,
-              currentWeather: _currentWeather,
-            ))),
-          ),
-        ),
-      ],
-    );
+    return const SizedBox.shrink(); // 기존 헤더 내용은 AppBar로 이동됨
   }
 
   Widget _buildMainWeatherCard() {
@@ -336,15 +335,15 @@ class _HomeScreenState extends State<HomeScreen> {
       if (diff.abs() < 0.5) {
         diffText = '어제와 기온이 비슷해요';
       } else if (diff > 0) {
-        diffText = '어제보다 ${diff.abs().toStringAsFixed(1).replaceAll('.0', '')}° 높아요';
+        diffText = '어제보다 ${context.read<AppSettings>().getTemperature(diff.abs(), withUnit: false)}° 높아요';
       } else {
-        diffText = '어제보다 ${diff.abs().toStringAsFixed(1).replaceAll('.0', '')}° 낮아요';
+        diffText = '어제보다 ${context.read<AppSettings>().getTemperature(diff.abs(), withUnit: false)}° 낮아요';
       }
     }
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.fromLTRB(24, 24, 24, 21),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
         gradient: const LinearGradient(
@@ -396,18 +395,18 @@ class _HomeScreenState extends State<HomeScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            '$temp',
+                            context.watch<AppSettings>().getTemperature(temp.toDouble(), withUnit: false),
                             style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 76,
                                 fontWeight: FontWeight.w700,
                                 letterSpacing: -3),
                           ),
-                          const Padding(
-                            padding: EdgeInsets.only(top: 14, left: 2),
+                          Padding(
+                            padding: const EdgeInsets.only(top: 14, left: 2),
                             child: Text(
-                              '°C',
-                              style: TextStyle(
+                              context.watch<AppSettings>().temperatureUnit == TemperatureUnit.celsius ? '°C' : '°F',
+                              style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 34,
                                   fontWeight: FontWeight.w400),
@@ -441,9 +440,20 @@ class _HomeScreenState extends State<HomeScreen> {
                       fontSize: 18,
                       fontWeight: FontWeight.w500),
                 ),
+              if (current != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8.0),
+                  child: Text(
+                    '체감온도 ${context.read<AppSettings>().getTemperature(WeatherService().calculateFeelsLike(temp.toDouble(), windSpeed: double.tryParse(windSpeed) ?? 0.0, humidity: humidity.toDouble()))}',
+                    style: TextStyle(
+                        color: Colors.white.withOpacity(0.9),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500),
+                  ),
+                ),
               const SizedBox(height: 8),
               Text(
-                '최고 ${_maxTemp.round()}° / 최저 ${_minTemp.round()}°',
+                '최고 ${context.watch<AppSettings>().getTemperature(_maxTemp)} / 최저 ${context.watch<AppSettings>().getTemperature(_minTemp)}',
                 style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.8),
                     fontSize: 15,
@@ -457,8 +467,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   _buildWeatherStat(Icons.water_drop_outlined, '$humidity%', '습도'),
                   _buildWeatherStat(Icons.air, '${windSpeed}m/s', '풍속'),
-                  _buildWeatherStat(Icons.thermostat_outlined, '${_maxTemp.round()}°', '최고'),
-                  _buildWeatherStat(Icons.thermostat_outlined, '${_minTemp.round()}°', '최저'),
+                  _buildWeatherStat(Icons.thermostat_outlined, context.watch<AppSettings>().getTemperature(_maxTemp), '최고'),
+                  _buildWeatherStat(Icons.thermostat_outlined, context.watch<AppSettings>().getTemperature(_minTemp), '최저'),
                 ],
               ),
             ],
@@ -714,7 +724,10 @@ class _HomeScreenState extends State<HomeScreen> {
         return _buildDetailCard(Icons.water_drop_outlined, '강수량', '0mm', '비 안옴', Colors.cyan, const Color(0xFFE0F7FA));
       case '체감온도':
         final temp = current?.temp.round() ?? 0;
-        return _buildDetailCard(Icons.thermostat, '체감온도', '$temp°', '비슷함', Colors.redAccent, const Color(0xFFFFEBEE));
+        final windSpeed = current?.wsd.toStringAsFixed(1) ?? '0.0';
+        final humidity = current?.reh.round() ?? 0;
+        final feelsLike = WeatherService().calculateFeelsLike(temp.toDouble(), windSpeed: double.tryParse(windSpeed) ?? 0.0, humidity: humidity.toDouble());
+        return _buildDetailCard(Icons.thermostat, '체감온도', context.watch<AppSettings>().getTemperature(feelsLike), '비슷함', Colors.redAccent, const Color(0xFFFFEBEE));
       case '미세먼지':
         final pm10 = _airQuality?.pm10 ?? '30';
         return _buildDetailCard(Icons.masks_outlined, '미세먼지', pm10, context.read<AppSettings>().getPm10Status(double.tryParse(pm10) ?? 0), Colors.green, const Color(0xFFE8F5E9));
@@ -764,6 +777,16 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildWeeklyForecast() {
+    if (_dailyData.isEmpty) return const SizedBox.shrink();
+
+    // 1) 5일간 전체의 최저/최고 기온 구하기
+    double globalMin = _dailyData.map((e) => e.minTemp).reduce(math.min);
+    double globalMax = _dailyData.map((e) => e.maxTemp).reduce(math.max);
+    double tempRange = globalMax - globalMin;
+    
+    // 온도 차이가 없을 경우(예: 모두 0도) 0으로 나누는 것을 방지
+    if (tempRange == 0) tempRange = 1;
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -789,49 +812,60 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
           const SizedBox(height: 16),
-          ..._dailyData.map((item) => Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            child: Row(
-              children: [
-                SizedBox(width: 50, child: Text(item.dayLabel, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 14))),
-                const SizedBox(width: 4),
-                Text(item.weatherEmoji, style: const TextStyle(fontSize: 22)),
-                const SizedBox(width: 12),
-                // 온도 진행바 (이미지 스타일)
-                Expanded(
-                  child: Container(
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF0F0F0),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                    child: FractionallySizedBox(
-                      alignment: Alignment.center,
-                      widthFactor: 0.6, // 예시용 고정 비율 (실제로는 기온 데이터로 계산 가능)
-                      child: Container(
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(colors: [Color(0xFF64B5F6), Color(0xFF2196F3)]),
-                          borderRadius: BorderRadius.circular(2),
+          ..._dailyData.map((item) {
+            // 해당 날짜의 기온 범위 비율 계산
+            double startRatio = (item.minTemp - globalMin) / tempRange;
+            double widthRatio = (item.maxTemp - item.minTemp) / tempRange;
+            double endRatio = 1.0 - (startRatio + widthRatio);
+
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              child: Row(
+                children: [
+                  SizedBox(width: 50, child: Text(item.dayLabel, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 14))),
+                  const SizedBox(width: 4),
+                  Text(item.weatherEmoji, style: const TextStyle(fontSize: 22)),
+                  const SizedBox(width: 12),
+                  // 동적 온도 진행바
+                  Expanded(
+                    child: Row(
+                      children: [
+                        // 앞쪽 빈 공간 (최저기온까지)
+                        if (startRatio > 0)
+                          Spacer(flex: (startRatio * 100).toInt()),
+                        // 기온 바
+                        Expanded(
+                          flex: (widthRatio * 100).toInt() > 0 ? (widthRatio * 100).toInt() : 1, // 최소 두께 보장
+                          child: Container(
+                            height: 4,
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(colors: [Color(0xFF64B5F6), Color(0xFF2196F3)]),
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
                         ),
-                      ),
+                        // 뒤쪽 빈 공간 (최고기온부터)
+                        if (endRatio > 0)
+                          Spacer(flex: (endRatio * 100).toInt()),
+                      ],
                     ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                SizedBox(
-                  width: 60,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      Text('${item.maxTemp.round()}°', style: const TextStyle(fontWeight: FontWeight.w700, color: AppTheme.textPrimary, fontSize: 14)),
-                      const SizedBox(width: 6),
-                      Text('${item.minTemp.round()}°', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
-                    ],
+                  const SizedBox(width: 12),
+                  SizedBox(
+                    width: 65,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        Text(context.watch<AppSettings>().getTemperature(item.maxTemp), style: const TextStyle(fontWeight: FontWeight.w700, color: AppTheme.textPrimary, fontSize: 13)),
+                        const SizedBox(width: 4),
+                        Text(context.watch<AppSettings>().getTemperature(item.minTemp), style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                      ],
+                    ),
                   ),
-                ),
-              ],
-            ),
-          )),
+                ],
+              ),
+            );
+          }),
         ],
       ),
     );
@@ -875,7 +909,7 @@ class _HomeScreenState extends State<HomeScreen> {
         onTap: (index) {
           setState(() => _selectedIndex = index);
           final dressingAdvice = _dressingIndex?.outfitAdvice ?? '';
-          if (index == 1) Navigator.push(context, MaterialPageRoute(builder: (_) => const AirQualityScreen()));
+          if (index == 1) Navigator.push(context, MaterialPageRoute(builder: (_) => AirQualityScreen(sidoName: _sidoName, dongName: _dongName)));
           if (index == 2) {
             final currentTemp = _currentWeather?.temp ?? 15.0;
             Navigator.push(context, MaterialPageRoute(builder: (_) => OutfitScreen(apiAdvice: dressingAdvice, currentTemp: currentTemp)));

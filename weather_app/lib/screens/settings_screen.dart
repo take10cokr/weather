@@ -13,12 +13,13 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _notificationsEnabled = true;
   bool _locationEnabled = true;
-  String _selectedUnit = '섭씨 (°C)';
   String _selectedLanguage = '한국어';
   String _updateInterval = '30분마다';
 
   @override
   Widget build(BuildContext context) {
+    final settings = context.watch<AppSettings>();
+
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
@@ -44,7 +45,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 16),
             _buildSectionTitle('표시 설정'),
             _buildSettingCard([
-              _buildDropdownTile(Icons.thermostat, '온도 단위', _selectedUnit, ['섭씨 (°C)', '화씨 (°F)'], (v) => setState(() => _selectedUnit = v!)),
+              _buildDropdownTile(
+                Icons.thermostat,
+                '온도 단위',
+                settings.temperatureUnit.label,
+                [TemperatureUnit.celsius.label, TemperatureUnit.fahrenheit.label],
+                (v) {
+                  if (v == TemperatureUnit.celsius.label) {
+                    settings.setTemperatureUnit(TemperatureUnit.celsius);
+                  } else {
+                    settings.setTemperatureUnit(TemperatureUnit.fahrenheit);
+                  }
+                },
+              ),
               _buildDropdownTile(Icons.language, '언어', _selectedLanguage, ['한국어', 'English', '日本語'], (v) => setState(() => _selectedLanguage = v!)),
               _buildDropdownTile(Icons.update, '업데이트 주기', _updateInterval, ['10분마다', '30분마다', '1시간마다'], (v) => setState(() => _updateInterval = v!)),
             ]),

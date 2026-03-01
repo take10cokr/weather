@@ -40,7 +40,7 @@ class WeatherProApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'WeatherPro',
+      title: '날씨',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       home: const WithForegroundTask(

@@ -27,16 +27,36 @@ extension DustStandardExt on DustStandard {
   }
 }
 
+/// 온도 단위 설정
+enum TemperatureUnit {
+  celsius,    // 섭씨 (°C)
+  fahrenheit, // 화씨 (°F)
+}
+
+extension TemperatureUnitExt on TemperatureUnit {
+  String get label {
+    switch (this) {
+      case TemperatureUnit.celsius:
+        return '섭씨 (°C)';
+      case TemperatureUnit.fahrenheit:
+        return '화씨 (°F)';
+    }
+  }
+}
+
 class AppSettings extends ChangeNotifier {
   static const _keyDustStandard = 'dust_standard';
   static const _keyInterestItems = 'interest_items';
   static const _keyFavoriteLocations = 'favorite_locations';
+  static const _keyTemperatureUnit = 'temperature_unit';
 
   DustStandard _dustStandard = DustStandard.korean;
+  TemperatureUnit _temperatureUnit = TemperatureUnit.celsius;
   List<String> _interestItems = ['풍속', '자외선 지수', '가시거리', '습도']; // 기본 4개
   List<String> _favoriteLocations = []; // 즐겨찾기 지역
 
   DustStandard get dustStandard => _dustStandard;
+  TemperatureUnit get temperatureUnit => _temperatureUnit;
   List<String> get interestItems => _interestItems;
   List<String> get favoriteLocations => _favoriteLocations;
 
@@ -48,6 +68,13 @@ class AppSettings extends ChangeNotifier {
       _dustStandard = DustStandard.who;
     } else {
       _dustStandard = DustStandard.korean;
+    }
+
+    final savedUnit = prefs.getString(_keyTemperatureUnit);
+    if (savedUnit == 'fahrenheit') {
+      _temperatureUnit = TemperatureUnit.fahrenheit;
+    } else {
+      _temperatureUnit = TemperatureUnit.celsius;
     }
     
     final savedItems = prefs.getStringList(_keyInterestItems);
@@ -69,6 +96,28 @@ class AppSettings extends ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keyDustStandard, standard.name);
+  }
+
+  /// 온도 단위 변경 & 저장
+  Future<void> setTemperatureUnit(TemperatureUnit unit) async {
+    _temperatureUnit = unit;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyTemperatureUnit, unit.name);
+  }
+
+  /// 섭씨를 현재 설정된 단위의 온도로 변환 (문자열 반환)
+  String getTemperature(double celsius, {bool withUnit = true}) {
+    double temp = celsius;
+    if (_temperatureUnit == TemperatureUnit.fahrenheit) {
+      temp = (celsius * 9 / 5) + 32;
+    }
+    
+    String formattedTemp = temp.round().toString();
+    if (withUnit) {
+      formattedTemp += _temperatureUnit == TemperatureUnit.celsius ? '°' : '°F';
+    }
+    return formattedTemp;
   }
 
   /// 관심날씨 4개 저장
