@@ -378,7 +378,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 21),
+      padding: const EdgeInsets.fromLTRB(24, 19, 24, 16),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
         gradient: const LinearGradient(
@@ -433,7 +433,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             context.watch<AppSettings>().getTemperature(temp.toDouble(), withUnit: false),
                             style: const TextStyle(
                                 color: Colors.white,
-                                fontSize: 76,
+                                fontSize: 75,
                                 fontWeight: FontWeight.w700,
                                 letterSpacing: -3),
                           ),
