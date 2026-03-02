@@ -32,9 +32,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   bool _isLoading = true;
   String _errorMessage = '';
-  String _dongName = '역삼동';        // 표시할 동 이름
-  String _sidoName = '서울';          // 표시할 시/도 이름
-  String _fullAddress = '서울특별시 강남구 역삼동'; // 전체 주소
+  String _cityName = ''; // 시/군/구 이름
+  String _dongName = '';        // 표시할 동 이름
+  String _sidoName = '';          // 표시할 시/도 이름
+  String _fullAddress = ''; // 전체 주소
   bool _isLocating = true;            // GPS 찾는 중
 
   List<WeatherForecast> _forecasts = [];
@@ -54,21 +55,57 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _initLocationAndWeather() async {
-    // GPS 위치 먼저
+    final prefs = await SharedPreferences.getInstance();
+    
+    // GPS 위치 시도
     final loc = await _locationService.getCurrentLocation();
     if (loc != null) {
       _service.setGrid(loc.nx, loc.ny);
       
-      // 위치 정보 저장 (알림 서비스 공유용)
-      final prefs = await SharedPreferences.getInstance();
+      // 위치 정보 저장
       await prefs.setInt('nx', loc.nx);
       await prefs.setInt('ny', loc.ny);
-      await prefs.setString('current_city', loc.dongName);
+      await prefs.setString('current_city_gu', loc.cityName);
+      await prefs.setString('current_dong', loc.dongName);
+      await prefs.setString('full_address', loc.fullAddress);
 
-      if (mounted) setState(() {
-        _dongName = loc.dongName;
-        _fullAddress = loc.fullAddress;
-      });
+      if (mounted) {
+        setState(() {
+          _cityName = loc.cityName; 
+          _dongName = loc.dongName;
+          _fullAddress = loc.fullAddress;
+          _sidoName = _extractSido(_fullAddress);
+        });
+      }
+    } else {
+      // GPS 실패 시 저장된 위치 로드
+      final nx = prefs.getInt('nx');
+      final ny = prefs.getInt('ny');
+      final cityNameGu = prefs.getString('current_city_gu');
+      final dongName = prefs.getString('current_dong');
+      final addr = prefs.getString('full_address');
+      
+      if (nx != null && ny != null) {
+        _service.setGrid(nx, ny);
+        if (mounted) {
+          setState(() {
+            _cityName = cityNameGu ?? '수원시'; // 경기 기본값
+            _dongName = dongName ?? '인계동';
+            _fullAddress = addr ?? '위치 정보를 가져올 수 없습니다.';
+            _sidoName = _extractSido(_fullAddress);
+          });
+        }
+      } else {
+        // 완전 초기 상태 (전역 디폴트 강남구)
+         if (mounted) {
+          setState(() {
+            _cityName = '강남구';
+            _dongName = '지역 미설정';
+            _sidoName = '서울';
+            _fullAddress = '위치 권한을 확인해 주세요.';
+          });
+        }
+      }
     }
     setState(() => _isLocating = false);
     await _loadWeatherData();
@@ -87,58 +124,56 @@ class _HomeScreenState extends State<HomeScreen> {
       final dressing = await _service.fetchDressingIndex();
       final minMax = _service.getTodayMinMax(forecasts);
       
-      // Extract sidoName from fullAddress (e.g., "서울특별시 강남구 역삼동" -> "서울")
-      String sidoName = '서울';
-      if (_fullAddress.isNotEmpty) {
-        final parts = _fullAddress.split(' ');
-        if (parts.isNotEmpty) {
-          String rawSido = parts[0];
-          // Map to AirKorea sido names
-          if (rawSido.startsWith('서울')) sidoName = '서울';
-          else if (rawSido.startsWith('부산')) sidoName = '부산';
-          else if (rawSido.startsWith('대구')) sidoName = '대구';
-          else if (rawSido.startsWith('인천')) sidoName = '인천';
-          else if (rawSido.startsWith('광주')) sidoName = '광주';
-          else if (rawSido.startsWith('대전')) sidoName = '대전';
-          else if (rawSido.startsWith('울산')) sidoName = '울산';
-          else if (rawSido.startsWith('경기')) sidoName = '경기';
-          else if (rawSido.startsWith('강원')) sidoName = '강원';
-          else if (rawSido.startsWith('충청북도') || rawSido.startsWith('충북')) sidoName = '충북';
-          else if (rawSido.startsWith('충청남도') || rawSido.startsWith('충남')) sidoName = '충남';
-          else if (rawSido.startsWith('전라북도') || rawSido.startsWith('전북')) sidoName = '전북';
-          else if (rawSido.startsWith('전라남도') || rawSido.startsWith('전남')) sidoName = '전남';
-          else if (rawSido.startsWith('경상북도') || rawSido.startsWith('경북')) sidoName = '경북';
-          else if (rawSido.startsWith('경상남도') || rawSido.startsWith('경남')) sidoName = '경남';
-          else if (rawSido.startsWith('제주')) sidoName = '제주';
-          else if (rawSido.startsWith('세종')) sidoName = '세종';
-        }
-      }
-      _sidoName = sidoName;
+      _sidoName = _extractSido(_fullAddress);
       
-      final airQuality = await _service.fetchAirQuality(_sidoName, _dongName);
+      final liveData = await _service.fetchLiveWeather();
+      final airQuality = await _service.fetchAirQuality(_sidoName, _cityName, _dongName);
       final yesterdayTemp = await _service.fetchYesterdayTemp();
 
       setState(() {
         _forecasts = forecasts;
         _hourlyData = _service.parseHourlyData(forecasts);
         _dailyData = _service.parseDailyForecast(forecasts);
-        _currentWeather = _service.getCurrentWeather(forecasts);
+        _currentWeather = _service.getCurrentWeather(forecasts, liveData: liveData);
         _dressingIndex = dressing;
         _airQuality = airQuality;
         _maxTemp = minMax['max'] ?? 0;
         _minTemp = minMax['min'] ?? 0;
         _yesterdayTemp = yesterdayTemp;
         _isLoading = false;
-        _errorMessage = '';
       });
-      
-      NotificationService.start();
     } catch (e) {
       setState(() {
-        _errorMessage = '날씨 정보를 불러올 수 없습니다.';
+        _errorMessage = '데이터 로딩 실패: $e';
         _isLoading = false;
       });
     }
+  }
+
+  String _extractSido(String address) {
+    if (address.isEmpty) return '서울';
+    final parts = address.split(' ');
+    if (parts.isEmpty) return '서울';
+    
+    String rawSido = parts[0];
+    if (rawSido.startsWith('서울')) return '서울';
+    if (rawSido.startsWith('부산')) return '부산';
+    if (rawSido.startsWith('대구')) return '대구';
+    if (rawSido.startsWith('인천')) return '인천';
+    if (rawSido.startsWith('광주')) return '광주';
+    if (rawSido.startsWith('대전')) return '대전';
+    if (rawSido.startsWith('울산')) return '울산';
+    if (rawSido.startsWith('경기')) return '경기';
+    if (rawSido.startsWith('강원')) return '강원';
+    if (rawSido.startsWith('충북') || rawSido.startsWith('충청북도')) return '충북';
+    if (rawSido.startsWith('충남') || rawSido.startsWith('충청남도')) return '충남';
+    if (rawSido.startsWith('전북') || rawSido.startsWith('전라북도')) return '전북';
+    if (rawSido.startsWith('전남') || rawSido.startsWith('전라남도')) return '전남';
+    if (rawSido.startsWith('경북') || rawSido.startsWith('경상북도')) return '경북';
+    if (rawSido.startsWith('경남') || rawSido.startsWith('경상남도')) return '경남';
+    if (rawSido.startsWith('제주')) return '제주';
+    if (rawSido.startsWith('세종')) return '세종';
+    return '서울';
   }
 
 
@@ -490,54 +525,102 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildAirQualityCard() {
-    if (_airQuality == null) return const SizedBox();
+    // 로딩 중이 아니고 데이터가 아예 없는 경우에만 숨기거나 에러 표시
+    if (!_isLoading && _airQuality == null) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF1F8FF),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: const Color(0xFFE1F0FF)),
+        ),
+        child: const Row(
+          children: [
+            Icon(Icons.info_outline, color: AppTheme.textSecondary),
+            SizedBox(width: 12),
+            Text('대기질 정보를 불러올 수 없습니다.', style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+          ],
+        ),
+      );
+    }
+    
+    // 로딩 중일 때 표시할 임시 카드
+    if (_isLoading) {
+      return Container(
+        height: 80,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: const Color(0xFFF1F8FF),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: const SizedBox(
+          width: 20,
+          height: 20,
+          child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primaryColor),
+        ),
+      );
+    }
     
     final pm25Value = double.tryParse(_airQuality!.pm25) ?? 0;
     final status = context.read<AppSettings>().getPm25Status(pm25Value);
     final color = context.read<AppSettings>().statusColor(status);
     final aqi = _airQuality!.aqi;
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF1F8FF), // 이미지와 유사한 연한 파란색 배경
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFE1F0FF)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              shape: BoxShape.circle,
-              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10)],
-            ),
-            child: Icon(Icons.energy_savings_leaf_rounded, color: color, size: 22),
+    return InkWell(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => AirQualityScreen(
+            sidoName: _sidoName,
+            cityName: _cityName,
+            dongName: _dongName,
+            initialData: _airQuality,
           ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+        ),
+      ),
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF1F8FF), // 이미지와 유사한 연한 파란색 배경
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: const Color(0xFFE1F0FF)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10)],
+              ),
+              child: Icon(Icons.energy_savings_leaf_rounded, color: color, size: 22),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('미세먼지 상태', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: AppTheme.textPrimary)),
+                  const SizedBox(height: 2),
+                  Text(
+                    status == '좋음' ? '현재 대기 질이 매우 좋습니다.' : (status == '보통' ? '현재 대기 질이 보통입니다.' : '대기 질이 좋지 않습니다.'),
+                    style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                  ),
+                ],
+              ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                const Text('미세먼지 상태', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: AppTheme.textPrimary)),
-                const SizedBox(height: 2),
-                Text(
-                  status == '좋음' ? '현재 대기 질이 매우 좋습니다.' : (status == '보통' ? '현재 대기 질이 보통입니다.' : '대기 질이 좋지 않습니다.'),
-                  style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
-                ),
+                Text(status, style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: color)),
+                Text('AQI $aqi', style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
               ],
             ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(status, style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: color)),
-              Text('AQI $aqi', style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
-            ],
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -730,10 +813,26 @@ class _HomeScreenState extends State<HomeScreen> {
         return _buildDetailCard(Icons.thermostat, '체감온도', context.watch<AppSettings>().getTemperature(feelsLike), '비슷함', Colors.redAccent, const Color(0xFFFFEBEE));
       case '미세먼지':
         final pm10 = _airQuality?.pm10 ?? '30';
-        return _buildDetailCard(Icons.masks_outlined, '미세먼지', pm10, context.read<AppSettings>().getPm10Status(double.tryParse(pm10) ?? 0), Colors.green, const Color(0xFFE8F5E9));
+        return _buildDetailCard(
+          Icons.masks_outlined, 
+          '미세먼지', 
+          pm10, 
+          context.read<AppSettings>().getPm10Status(double.tryParse(pm10) ?? 0), 
+          Colors.green, 
+          const Color(0xFFE8F5E9),
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AirQualityScreen(sidoName: _sidoName, cityName: _cityName, dongName: _dongName, initialData: _airQuality))),
+        );
       case '초미세먼지':
         final pm25 = _airQuality?.pm25 ?? '15';
-        return _buildDetailCard(Icons.masks, '초미세먼지', pm25, context.read<AppSettings>().getPm25Status(double.tryParse(pm25) ?? 0), Colors.teal, const Color(0xFFE0F2F1));
+        return _buildDetailCard(
+          Icons.masks, 
+          '초미세먼지', 
+          pm25, 
+          context.read<AppSettings>().getPm25Status(double.tryParse(pm25) ?? 0), 
+          Colors.teal, 
+          const Color(0xFFE0F2F1),
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AirQualityScreen(sidoName: _sidoName, cityName: _cityName, dongName: _dongName, initialData: _airQuality))),
+        );
       case '옷차림':
         final h3 = _dressingIndex?.h3 ?? '65';
         return _buildDetailCard(Icons.checkroom, '옷차림', h3, '지수', Colors.purple, const Color(0xFFF3E5F5));
@@ -744,34 +843,38 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Widget _buildDetailCard(IconData icon, String title, String value, String sub, Color iconColor, Color bgColor) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 15, offset: const Offset(0, 5))],
-        border: Border.all(color: const Color(0xFFF0F0F0)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: [
-              Container(padding: const EdgeInsets.all(6), decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(8)), child: Icon(icon, size: 16, color: iconColor)),
-              const SizedBox(width: 6),
-              Expanded(child: Text(title, style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary), overflow: TextOverflow.ellipsis)),
-            ],
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
-              Text(sub, style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary, overflow: TextOverflow.ellipsis)),
-            ],
-          ),
-        ],
+  Widget _buildDetailCard(IconData icon, String title, String value, String sub, Color iconColor, Color bgColor, {VoidCallback? onTap}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 15, offset: const Offset(0, 5))],
+          border: Border.all(color: const Color(0xFFF0F0F0)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                Container(padding: const EdgeInsets.all(6), decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(8)), child: Icon(icon, size: 16, color: iconColor)),
+                const SizedBox(width: 6),
+                Expanded(child: Text(title, style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary), overflow: TextOverflow.ellipsis)),
+              ],
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
+                Text(sub, style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary, overflow: TextOverflow.ellipsis)),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -909,7 +1012,7 @@ class _HomeScreenState extends State<HomeScreen> {
         onTap: (index) {
           setState(() => _selectedIndex = index);
           final dressingAdvice = _dressingIndex?.outfitAdvice ?? '';
-          if (index == 1) Navigator.push(context, MaterialPageRoute(builder: (_) => AirQualityScreen(sidoName: _sidoName, dongName: _dongName)));
+          if (index == 1) Navigator.push(context, MaterialPageRoute(builder: (_) => AirQualityScreen(sidoName: _sidoName, cityName: _cityName, dongName: _dongName, initialData: _airQuality)));
           if (index == 2) {
             final currentTemp = _currentWeather?.temp ?? 15.0;
             Navigator.push(context, MaterialPageRoute(builder: (_) => OutfitScreen(apiAdvice: dressingAdvice, currentTemp: currentTemp)));

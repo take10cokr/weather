@@ -7,12 +7,16 @@ import '../theme/app_theme.dart';
 
 class AirQualityScreen extends StatefulWidget {
   final String sidoName;
+  final String cityName;
   final String dongName;
+  final AirQualityData? initialData;
 
   const AirQualityScreen({
     super.key,
     required this.sidoName,
+    required this.cityName,
     required this.dongName,
+    this.initialData,
   });
 
   @override
@@ -23,26 +27,48 @@ class _AirQualityScreenState extends State<AirQualityScreen> {
   final WeatherService _service = WeatherService();
   AirQualityData? _data;
   bool _isLoading = true;
+  String? _statusMessage;
 
   @override
   void initState() {
     super.initState();
-    _fetchData();
+    if (widget.initialData != null) {
+      _data = widget.initialData;
+      _isLoading = false;
+    } else {
+      _fetchData();
+    }
   }
 
   Future<void> _fetchData() async {
-    setState(() => _isLoading = true);
-    final data = await _service.fetchAirQuality(widget.sidoName, widget.dongName);
-    if (mounted) {
-      setState(() {
-        _data = data;
-        _isLoading = false;
-      });
+    if (!mounted) return;
+    setState(() {
+      _isLoading = true;
+      _statusMessage = null;
+    });
+    try {
+      final data = await _service.fetchAirQuality(widget.sidoName, widget.cityName, widget.dongName);
+      if (mounted) {
+        setState(() {
+          _data = data;
+          _isLoading = false;
+          if (data == null) _statusMessage = '측정소 데이터를 찾을 수 없거나\n통신 중 오류가 발생했습니다.';
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _statusMessage = '오류: $e';
+        });
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final station = _data?.stationName ?? widget.dongName;
+    
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FB),
       appBar: AppBar(
@@ -54,7 +80,7 @@ class _AirQualityScreenState extends State<AirQualityScreen> {
               children: [
                 const Icon(Icons.location_on, size: 10, color: AppTheme.textSecondary),
                 const SizedBox(width: 2),
-                Text('${widget.sidoName} ${widget.dongName}', style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary, fontWeight: FontWeight.w500)),
+                Text('${widget.sidoName} $station', style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary, fontWeight: FontWeight.w500)),
               ],
             ),
           ],
@@ -66,37 +92,56 @@ class _AirQualityScreenState extends State<AirQualityScreen> {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.share_outlined),
-            onPressed: () {},
+            icon: const Icon(Icons.refresh_rounded),
+            onPressed: _fetchData,
           ),
         ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _fetchData,
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildAqiMainCard(context),
-                    const SizedBox(height: 32),
-                    const Text('상세 오염 물질', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18, color: AppTheme.textPrimary)),
-                    const SizedBox(height: 16),
-                    _buildPollutantGrid(context),
-                    const SizedBox(height: 32),
-                    _buildHourlyForecast(context),
-                    const SizedBox(height: 32),
-                    const Text('행동 권고', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18, color: AppTheme.textPrimary)),
-                    const SizedBox(height: 16),
-                    _buildHealthAdvice(),
-                    const SizedBox(height: 40),
-                  ],
+          : (_data == null) 
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.cloud_off, size: 64, color: Colors.grey),
+                      const SizedBox(height: 16),
+                      Text(_statusMessage ?? '데이터를 가져올 수 없습니다.', 
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: AppTheme.textSecondary, fontSize: 15)),
+                      const Text('잠시 후 다시 시도해 주세요.', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                      const SizedBox(height: 24),
+                      ElevatedButton(
+                        onPressed: _fetchData,
+                        child: const Text('다시 가져오기'),
+                      ),
+                    ],
+                  ),
+                )
+              : RefreshIndicator(
+                  onRefresh: _fetchData,
+                  child: SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildAqiMainCard(context),
+                        const SizedBox(height: 32),
+                        const Text('상세 오염 물질', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18, color: AppTheme.textPrimary)),
+                        const SizedBox(height: 16),
+                        _buildPollutantGrid(context),
+                        const SizedBox(height: 32),
+                        _buildHourlyForecast(context),
+                        const SizedBox(height: 32),
+                        const Text('행동 권고', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18, color: AppTheme.textPrimary)),
+                        const SizedBox(height: 16),
+                        _buildHealthAdvice(),
+                        const SizedBox(height: 40),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
-            ),
     );
   }
 

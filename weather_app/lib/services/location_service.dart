@@ -7,6 +7,7 @@ class LocationResult {
   final double lon;
   final int nx;   // KMA 격자 X
   final int ny;   // KMA 격자 Y
+  final String cityName;    // 강남구 또는 안양시
   final String dongName;    // 역삼동
   final String fullAddress; // 서울특별시 강남구 역삼동
 
@@ -15,6 +16,7 @@ class LocationResult {
     required this.lon,
     required this.nx,
     required this.ny,
+    required this.cityName,
     required this.dongName,
     required this.fullAddress,
   });
@@ -39,7 +41,7 @@ class LocationService {
   Future<LocationResult?> getCurrentLocation() async {
     try {
       final hasPermission = await _checkPermission();
-      if (!hasPermission) return _defaultLocation(); // 기본값: 강남 역삼동
+      if (!hasPermission) return null; 
 
       final position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
@@ -58,20 +60,28 @@ class LocationService {
 
       // 역지오코딩으로 주소 가져오기
       String dongName = '현재위치';
+      String cityName = '서울';
       String fullAddress = '';
 
       try {
         final placemarks = await placemarkFromCoordinates(lat, lon);
         if (placemarks.isNotEmpty) {
           final p = placemarks.first;
-          // subLocality = 동(洞), locality = 시/구
-          dongName = p.subLocality?.isNotEmpty == true
-              ? p.subLocality!
-              : (p.locality ?? '현재위치');
+          
+          cityName = p.locality?.isNotEmpty == true 
+              ? p.locality! 
+              : (p.subAdministrativeArea ?? '서울');
+              
+          // thoroughfare(동)가 있으면 우선 사용, 없으면 subLocality 사용
+          dongName = p.thoroughfare?.isNotEmpty == true
+              ? p.thoroughfare!
+              : (p.subLocality?.isNotEmpty == true ? p.subLocality! : (p.locality ?? '현재위치'));
+
           final parts = [
             p.administrativeArea,
             p.locality,
             p.subAdministrativeArea,
+            p.thoroughfare, // thoroughfare 추가
             p.subLocality,
           ].where((s) => s != null && s.isNotEmpty).toSet().toList();
           fullAddress = parts.join(' ');
@@ -85,11 +95,12 @@ class LocationService {
         lon: lon,
         nx: nx,
         ny: ny,
+        cityName: cityName,
         dongName: dongName,
         fullAddress: fullAddress,
       );
     } catch (e) {
-      return _defaultLocation();
+      return null;
     }
   }
 
@@ -100,6 +111,7 @@ class LocationService {
       lon: 127.0368,
       nx: 61,
       ny: 125,
+      cityName: '강남구',
       dongName: '역삼동',
       fullAddress: '서울특별시 강남구 역삼동',
     );

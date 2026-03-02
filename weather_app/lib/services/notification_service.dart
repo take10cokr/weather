@@ -34,7 +34,8 @@ class MyTaskHandler extends TaskHandler {
       final prefs = await SharedPreferences.getInstance();
       final nx = prefs.getInt('nx') ?? 61;
       final ny = prefs.getInt('ny') ?? 125;
-      final cityName = prefs.getString('current_city') ?? '서울';
+      final cityNameGu = prefs.getString('current_city_gu') ?? '구 선택';
+      final dongName = prefs.getString('current_dong') ?? '동 선택';
 
       _weatherService.setGrid(nx, ny);
       final forecasts = await _weatherService.fetchForecast();
@@ -42,7 +43,7 @@ class MyTaskHandler extends TaskHandler {
       
       // Since we don't have sidoName stored in prefs right now easily and want to prevent a crash, rely on dongName fallback we wrote earlier, or save sidoName later. 
       // For now passing default '서울' as sidoName
-      final airQuality = await _weatherService.fetchAirQuality('서울', cityName);
+      final airQuality = await _weatherService.fetchAirQuality('서울', cityNameGu, dongName);
       final yesterdayTemp = await _weatherService.fetchYesterdayTemp();
 
       if (current != null) {
@@ -51,7 +52,7 @@ class MyTaskHandler extends TaskHandler {
         final displayHour = now.hour == 0 ? 12 : (now.hour > 12 ? now.hour - 12 : now.hour);
         final timeStr = '$ampm ${displayHour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
         
-        String title = '지금 $cityName 날씨 - ${current.skyStatus}    $timeStr';
+        String title = '지금 $cityNameGu 날씨 - ${current.skyStatus}    $timeStr';
         String content = '🌡️ 현재 ${current.temp.toStringAsFixed(1)}°';
         
         if (yesterdayTemp != null) {

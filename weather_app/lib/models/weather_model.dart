@@ -153,6 +153,7 @@ class AirQualityData {
   final String so2;
   final String co;
   final String dataTime;
+  final String stationName;
 
   AirQualityData({
     required this.aqi,
@@ -163,6 +164,7 @@ class AirQualityData {
     required this.so2,
     required this.co,
     required this.dataTime,
+    required this.stationName,
   });
 
   factory AirQualityData.fromJson(Map<String, dynamic> json) {
@@ -180,6 +182,7 @@ class AirQualityData {
       so2: getValue(json['so2Value']),
       co: getValue(json['coValue']),
       dataTime: json['dataTime']?.toString() ?? '',
+      stationName: json['stationName']?.toString() ?? '알 수 없음',
     );
   }
 }

@@ -140,10 +140,74 @@ class WeatherService {
     }).toList();
   }
 
+  /// 초단기실황 API 호출 (현재 날씨 라이브)
+  Future<Map<String, String>> fetchLiveWeather() async {
+    final now = DateTime.now();
+    DateTime baseDateTime = now;
+    
+    // 초단기실황은 매시각 40분 발표. 40분 이전이면 전 시각으로.
+    if (now.minute < 40) {
+      baseDateTime = now.subtract(const Duration(hours: 1));
+    }
+    
+    final dateStr = '${baseDateTime.year}${baseDateTime.month.toString().padLeft(2, '0')}${baseDateTime.day.toString().padLeft(2, '0')}';
+    final timeStr = '${baseDateTime.hour.toString().padLeft(2, '0')}00';
+
+    final uri = Uri.https(
+      'apis.data.go.kr',
+      '/1360000/VilageFcstInfoService_2.0/getUltraSrtNcst',
+      {
+        'serviceKey': _apiKey,
+        'pageNo': '1',
+        'numOfRows': '100',
+        'dataType': 'JSON',
+        'base_date': dateStr,
+        'base_time': timeStr,
+        'nx': '$_nx',
+        'ny': '$_ny',
+      },
+    );
+
+    try {
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final body = jsonDecode(utf8.decode(response.bodyBytes));
+        final items = body['response']?['body']?['items']?['item'] as List?;
+        if (items != null) {
+          final Map<String, String> data = {};
+          for (var item in items) {
+            data[item['category']] = item['obsrValue'].toString();
+          }
+          return data;
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+    return {};
+  }
+
   /// 오늘 현재 기온 가져오기
-  HourlyWeatherData? getCurrentWeather(List<WeatherForecast> forecasts) {
+  HourlyWeatherData? getCurrentWeather(List<WeatherForecast> forecasts, {Map<String, String>? liveData}) {
     final hourly = parseHourlyData(forecasts);
-    return hourly.isNotEmpty ? hourly.first : null;
+    if (hourly.isEmpty) return null;
+    
+    final first = hourly.first;
+    
+    // 라이브 데이터(초단기실황)가 있으면 덮어씌움
+    if (liveData != null && liveData.isNotEmpty) {
+      return HourlyWeatherData(
+        time: '지금',
+        temp: double.tryParse(liveData['T1H'] ?? '') ?? first.temp,
+        sky: first.sky, // 실황에는 SKY가 없음 (예보 데이터 유지)
+        pty: int.tryParse(liveData['PTY'] ?? '') ?? first.pty,
+        pop: first.pop,
+        reh: double.tryParse(liveData['REH'] ?? '') ?? first.reh,
+        wsd: double.tryParse(liveData['WSD'] ?? '') ?? first.wsd,
+      );
+    }
+    
+    return first;
   }
 
   /// 오늘 최고/최저 기온
@@ -364,53 +428,103 @@ class WeatherService {
   }
 
   /// 에어코리아 대기질 실시간 정보 가져오기 (시도별 실시간 측정 데이터)
-  Future<AirQualityData?> fetchAirQuality(String sidoName, String dongName) async {
-    // API 주소: 한국환경공단_에어코리아_대기오염정보
-    final uri = Uri.https(
-      'apis.data.go.kr',
-      '/B552584/ArpltnInforInqireSvc/getCtprvnRltmMesureDnsty',
-      {
-        'serviceKey': _apiKey,
-        'returnType': 'json',
-        'numOfRows': '100',
-        'pageNo': '1',
-        'sidoName': sidoName,
-        'ver': '1.3',
-      },
-    );
+  Future<AirQualityData?> fetchAirQuality(String sidoName, String cityName, String dongName) async {
+    final mappedSido = _mapToAirKoreaSido(sidoName);
+
+    // 공공데이터 API 전용 쿼리 (ver 1.1로 시도)
+    final Map<String, String> queryParams = {
+      'serviceKey': _apiKey,
+      'returnType': 'json',
+      'numOfRows': '600', 
+      'pageNo': '1',
+      'sidoName': mappedSido,
+      'ver': '1.1', 
+    };
+
+    final uri = Uri.https('apis.data.go.kr', '/B552584/ArpltnInforInqireSvc/getCtprvnRltmMesureDnsty', queryParams);
 
     try {
-      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      final response = await http.get(uri).timeout(const Duration(seconds: 15));
       if (response.statusCode == 200) {
-        final bodyText = response.body;
-        print('fetchAirQuality RESPONSE: $bodyText'); // Debug log
+        final bodyText = utf8.decode(response.bodyBytes).trim();
+        if (!bodyText.startsWith('{')) return null;
 
         final body = jsonDecode(bodyText);
-        final items = body['response']?['body']?['items'] as List?;
         
+        // 공공데이터 API의 다양한 응답 구조 대응
+        List? items;
+        if (body['list'] is List) {
+          items = body['list'];
+        } else if (body['response']?['body']?['items'] is List) {
+          items = body['response']['body']['items'];
+        } else if (body['response']?['body']?['items'] is Map) {
+          final itemsMap = body['response']['body']['items'];
+          if (itemsMap['item'] is List) {
+            items = itemsMap['item'];
+          }
+        }
+
         if (items != null && items.isNotEmpty) {
-           // 해당 시군구(stationName) 데이터 찾기
-          Map<String, dynamic>? item;
-          try {
-             item = items.firstWhere((e) => e['stationName'] == dongName);
-          } catch (_) {
-             // 정확한 동 이름이 없으면 첫 번째 측정소 데이터(또는 가장 대표적인 곳)를 사용
-             item = items.first;
+          // 검색어 정제
+          final clean = (String s) => s.replaceAll(RegExp(r'[0-9\(\)]'), '').replaceAll(' ', '').replaceAll('동', '').replaceAll('구', '').replaceAll('시', '');
+          final dRoot = clean(dongName);
+          final cRoot = clean(cityName);
+
+          // 우선순위가 높은 측정소 찾기
+          Map<String, dynamic>? findBest() {
+            // 1순위: 동(루트) 포함 측정소
+            if (dRoot.isNotEmpty) {
+              for (var i in items!) {
+                final s = i['stationName'].toString();
+                if (s.contains(dRoot)) return i;
+              }
+            }
+            // 2순위: 시/구(루트) 포함 측정소
+            if (cRoot.isNotEmpty) {
+              for (var i in items!) {
+                final s = i['stationName'].toString();
+                if (s.contains(cRoot)) return i;
+              }
+            }
+            // 3순위: 시/도 내에서 데이터가 들어오는 아무 측정소나 (최후의 보루)
+            for (var i in items!) {
+              final val = i['khaiValue']?.toString();
+              if (val != null && val != '-' && val != 'null' && val.isNotEmpty) return i;
+            }
+            return items.first;
           }
 
-          if (item != null) {
-            return AirQualityData.fromJson(item);
+          final best = findBest();
+          if (best != null) {
+            return AirQualityData.fromJson(best);
           }
-        } else {
-            print('fetchAirQuality items is null or empty. Body: $body');
         }
-      } else {
-        print('fetchAirQuality non-200 status: ${response.statusCode}');
       }
     } catch (e) {
-      // 에러 시 null
-      print('fetchAirQuality exception: $e');
+      // ignore
     }
     return null;
+  }
+
+  String _mapToAirKoreaSido(String raw) {
+    if (raw.isEmpty) return '서울';
+    if (raw.contains('서울')) return '서울';
+    if (raw.contains('부산')) return '부산';
+    if (raw.contains('대구')) return '대구';
+    if (raw.contains('인천')) return '인천';
+    if (raw.contains('광주')) return '광주';
+    if (raw.contains('대전')) return '대전';
+    if (raw.contains('울산')) return '울산';
+    if (raw.contains('경기')) return '경기';
+    if (raw.contains('강원')) return '강원';
+    if (raw.contains('충북') || raw.contains('충청북도')) return '충북';
+    if (raw.contains('충남') || raw.contains('충청남도')) return '충남';
+    if (raw.contains('전북') || raw.contains('전라북도')) return '전북';
+    if (raw.contains('전남') || raw.contains('전라남도')) return '전남';
+    if (raw.contains('경북') || raw.contains('경상북도')) return '경북';
+    if (raw.contains('경남') || raw.contains('경상남도')) return '경남';
+    if (raw.contains('제주')) return '제주';
+    if (raw.contains('세종')) return '세종';
+    return '서울'; // 폴백
   }
 }
