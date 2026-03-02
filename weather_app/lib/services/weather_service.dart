@@ -431,14 +431,14 @@ class WeatherService {
   Future<AirQualityData?> fetchAirQuality(String sidoName, String cityName, String dongName) async {
     final mappedSido = _mapToAirKoreaSido(sidoName);
 
-    // 공공데이터 API 전용 쿼리 (ver 1.1로 시도)
+    // 공공데이터 API 전용 쿼리 (ver 1.3로 통일)
     final Map<String, String> queryParams = {
       'serviceKey': _apiKey,
       'returnType': 'json',
       'numOfRows': '600', 
       'pageNo': '1',
       'sidoName': mappedSido,
-      'ver': '1.1', 
+      'ver': '1.3', 
     };
 
     final uri = Uri.https('apis.data.go.kr', '/B552584/ArpltnInforInqireSvc/getCtprvnRltmMesureDnsty', queryParams);

@@ -1,4 +1,5 @@
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'weather_service.dart';
 import '../models/weather_model.dart';
@@ -11,6 +12,54 @@ void startCallback() {
 
 class MyTaskHandler extends TaskHandler {
   final WeatherService _weatherService = WeatherService();
+  final FlutterLocalNotificationsPlugin _localNotifPlugin = FlutterLocalNotificationsPlugin();
+  bool _isNotifInitialized = false;
+
+  Future<void> _initLocalNotif() async {
+    if (_isNotifInitialized) return;
+    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const iosSettings = DarwinInitializationSettings();
+    const initSettings = InitializationSettings(android: androidSettings, iOS: iosSettings);
+    await _localNotifPlugin.initialize(settings: initSettings);
+    _isNotifInitialized = true;
+  }
+
+  Future<void> _checkAndNotifyRain(List<HourlyWeatherData> hourly, SharedPreferences prefs) async {
+    if (hourly.length > 4) {
+      final targetForecast = hourly[4]; // 4시간 후 (현재 시간이 index 0)
+      if (targetForecast.pty > 0) { // 강수 있음
+        final now = DateTime.now();
+        final notifKey = '${now.month}${now.day}_${targetForecast.time}';
+        final lastNotifiedTime = prefs.getString('last_rain_notified_time');
+        
+        if (lastNotifiedTime != notifKey) {
+          await _initLocalNotif();
+          const androidDetails = AndroidNotificationDetails(
+            'rain_alert_channel',
+            '비 예보 알림',
+            channelDescription: '4시간 후 비 예보 알림',
+            importance: Importance.high,
+            priority: Priority.high,
+          );
+          const iosDetails = DarwinNotificationDetails();
+          const details = NotificationDetails(android: androidDetails, iOS: iosDetails);
+          
+          String rainType = '비';
+          if (targetForecast.pty == 2) rainType = '비/눈';
+          if (targetForecast.pty == 3) rainType = '눈';
+          if (targetForecast.pty == 4) rainType = '소나기';
+
+          await _localNotifPlugin.show(
+            id: 888,
+            title: '☂️ 우산 챙기세요!',
+            body: '4시간 후(${targetForecast.time})에 $rainType 예보가 있습니다.',
+            notificationDetails: details,
+          );
+          await prefs.setString('last_rain_notified_time', notifKey);
+        }
+      }
+    }
+  }
 
   @override
   Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
@@ -45,6 +94,10 @@ class MyTaskHandler extends TaskHandler {
       // For now passing default '서울' as sidoName
       final airQuality = await _weatherService.fetchAirQuality('서울', cityNameGu, dongName);
       final yesterdayTemp = await _weatherService.fetchYesterdayTemp();
+      final hourly = _weatherService.parseHourlyData(forecasts);
+
+      // 4시간 후 비 예보 알림 체크
+      await _checkAndNotifyRain(hourly, prefs);
 
       if (current != null) {
         final now = DateTime.now();
