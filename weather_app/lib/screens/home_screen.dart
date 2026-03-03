@@ -17,6 +17,7 @@ import 'package:provider/provider.dart';
 import '../services/app_settings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/notification_service.dart';
+import '../widgets/shared_bottom_nav_bar.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -268,7 +269,15 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
       ),
-      bottomNavigationBar: _buildBottomNavBar(),
+      bottomNavigationBar: SharedBottomNavBar(
+        currentIndex: _selectedIndex,
+        sidoName: _sidoName,
+        cityName: _cityName,
+        dongName: _dongName,
+        airQuality: _airQuality,
+        dressingAdvice: _dressingIndex?.outfitAdvice ?? '',
+        currentTemp: _currentWeather?.temp ?? 15.0,
+      ),
     );
   }
 
@@ -466,7 +475,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
               if (diffText.isNotEmpty)
                 Text(
                   diffText,
@@ -998,40 +1007,6 @@ class _HomeScreenState extends State<HomeScreen> {
         Text(label, style: const TextStyle(color: Color(0xFF795548), fontSize: 12)),
         Text(value, style: TextStyle(fontWeight: FontWeight.w700, color: color, fontSize: 13)),
       ],
-    );
-  }
-
-  Widget _buildBottomNavBar() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 20, offset: const Offset(0, -4))],
-      ),
-      child: BottomNavigationBar(
-        currentIndex: _selectedIndex,
-        onTap: (index) {
-          setState(() => _selectedIndex = index);
-          final dressingAdvice = _dressingIndex?.outfitAdvice ?? '';
-          if (index == 1) Navigator.push(context, MaterialPageRoute(builder: (_) => AirQualityScreen(sidoName: _sidoName, cityName: _cityName, dongName: _dongName, initialData: _airQuality)));
-          if (index == 2) {
-            final currentTemp = _currentWeather?.temp ?? 15.0;
-            Navigator.push(context, MaterialPageRoute(builder: (_) => OutfitScreen(apiAdvice: dressingAdvice, currentTemp: currentTemp)));
-          }
-          if (index == 3) Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
-        },
-        type: BottomNavigationBarType.fixed,
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        selectedItemColor: AppTheme.primaryColor,
-        unselectedItemColor: AppTheme.textSecondary,
-        selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 11),
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home_rounded), label: '홈'),
-          BottomNavigationBarItem(icon: Icon(Icons.air_rounded), label: '대기질'),
-          BottomNavigationBarItem(icon: Icon(Icons.checkroom), label: '옷차림'),
-          BottomNavigationBarItem(icon: Icon(Icons.settings_rounded), label: '설정'),
-        ],
-      ),
     );
   }
 }

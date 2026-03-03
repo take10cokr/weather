@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import '../widgets/shared_bottom_nav_bar.dart';
 
 class OutfitScreen extends StatelessWidget {
   final String apiAdvice;
@@ -41,6 +42,11 @@ class OutfitScreen extends StatelessWidget {
             _buildTips(),
           ],
         ),
+      ),
+      bottomNavigationBar: SharedBottomNavBar(
+        currentIndex: 2,
+        dressingAdvice: apiAdvice,
+        currentTemp: currentTemp,
       ),
     );
   }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/app_settings.dart';
 import '../theme/app_theme.dart';
+import '../widgets/shared_bottom_nav_bar.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -76,6 +77,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _buildClearCacheButton(),
           ],
         ),
+      ),
+      bottomNavigationBar: const SharedBottomNavBar(
+        currentIndex: 3,
       ),
     );
   }

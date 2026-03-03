@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../widgets/shared_bottom_nav_bar.dart';
 import '../services/app_settings.dart';
 import '../services/weather_service.dart';
 import '../models/weather_model.dart';
@@ -142,6 +143,13 @@ class _AirQualityScreenState extends State<AirQualityScreen> {
                     ),
                   ),
                 ),
+      bottomNavigationBar: SharedBottomNavBar(
+        currentIndex: 1,
+        sidoName: widget.sidoName,
+        cityName: widget.cityName,
+        dongName: widget.dongName,
+        airQuality: _data,
+      ),
     );
   }
 
