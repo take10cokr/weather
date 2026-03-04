@@ -4,6 +4,8 @@ import '../services/app_settings.dart';
 import '../services/notification_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/shared_bottom_nav_bar.dart';
+import 'privacy_policy_screen.dart';
+import 'terms_of_service_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -91,8 +93,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _buildSectionTitle('앱 정보'),
             _buildSettingCard([
               _buildNavTile(Icons.info_outline, '앱 버전', '1.0.0'),
-              _buildNavTile(Icons.privacy_tip_outlined, '개인정보 처리방침', ''),
-              _buildNavTile(Icons.article_outlined, '이용약관', ''),
+              _buildNavTile(
+                Icons.privacy_tip_outlined, 
+                '개인정보 처리방침', 
+                '', 
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PrivacyPolicyScreen()))
+              ),
+              _buildNavTile(
+                Icons.article_outlined, 
+                '이용약관', 
+                '', 
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TermsOfServiceScreen()))
+              ),
               _buildNavTile(Icons.star_border, '앱 평점 남기기', ''),
             ]),
             const SizedBox(height: 24),
@@ -205,7 +217,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildNavTile(IconData icon, String title, String trailing) {
+  Widget _buildNavTile(IconData icon, String title, String trailing, {VoidCallback? onTap}) {
     return ListTile(
       leading: Container(
         padding: const EdgeInsets.all(8),
@@ -220,6 +232,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const Icon(Icons.chevron_right, color: AppTheme.textSecondary),
         ],
       ),
+      onTap: onTap,
     );
   }
 
