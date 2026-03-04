@@ -27,6 +27,7 @@ class AirQualityScreen extends StatefulWidget {
 class _AirQualityScreenState extends State<AirQualityScreen> {
   final WeatherService _service = WeatherService();
   AirQualityData? _data;
+  List<Map<String, dynamic>> _history = [];
   bool _isLoading = true;
   String? _statusMessage;
 
@@ -49,9 +50,15 @@ class _AirQualityScreenState extends State<AirQualityScreen> {
     });
     try {
       final data = await _service.fetchAirQuality(widget.sidoName, widget.cityName, widget.dongName);
+      List<Map<String, dynamic>> history = [];
+      if (data != null) {
+        history = await _service.fetchAirQualityHistory(data.stationName);
+      }
+      
       if (mounted) {
         setState(() {
           _data = data;
+          _history = history;
           _isLoading = false;
           if (data == null) _statusMessage = '측정소 데이터를 찾을 수 없거나\n통신 중 오류가 발생했습니다.';
         });
@@ -155,7 +162,8 @@ class _AirQualityScreenState extends State<AirQualityScreen> {
 
   Widget _buildAqiMainCard(BuildContext context) {
     final settings = context.watch<AppSettings>();
-    final int aqi = _data?.aqi ?? 0;
+    final int aqi = _data?.aqi ?? -1;
+    final aqiText = aqi < 0 ? '-' : '$aqi';
     
     final pm25Val = double.tryParse(_data?.pm25 ?? '0') ?? 0;
     final status = settings.getPm25Status(pm25Val);
@@ -185,7 +193,7 @@ class _AirQualityScreenState extends State<AirQualityScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const Text('현재 지수', style: TextStyle(color: AppTheme.textSecondary, fontSize: 13, fontWeight: FontWeight.w500)),
-                  Text('$aqi', style: const TextStyle(fontSize: 52, fontWeight: FontWeight.w800, color: AppTheme.textPrimary, letterSpacing: -1)),
+                  Text(aqiText, style: const TextStyle(fontSize: 52, fontWeight: FontWeight.w800, color: AppTheme.textPrimary, letterSpacing: -1)),
                   Text(status, style: TextStyle(color: color, fontWeight: FontWeight.w800, fontSize: 18)),
                 ],
               ),
@@ -350,31 +358,35 @@ class _AirQualityScreenState extends State<AirQualityScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text('시간별 대기질 예보', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18, color: AppTheme.textPrimary)),
-            Text('24시간 기준', style: TextStyle(fontSize: 10, color: AppTheme.textSecondary.withValues(alpha: 0.6))),
+            const Text('시간별 대기질 추이', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18, color: AppTheme.textPrimary)),
+            Text('최근 24시간', style: TextStyle(fontSize: 10, color: AppTheme.textSecondary.withValues(alpha: 0.6))),
           ],
         ),
         const SizedBox(height: 16),
         Container(
-          height: 120,
+          height: 140,
           width: double.infinity,
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(20),
             boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10, offset: const Offset(0, 4))],
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              _buildBar(40, '14:00'),
-              _buildBar(55, '15:00'),
-              _buildBar(65, '16:00'),
-              _buildBar(45, '17:00'),
-              _buildBar(35, '18:00'),
-            ],
-          ),
+          child: _history.isEmpty 
+            ? const Center(child: Text('트렌드 데이터 없음', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)))
+            : ListView.separated(
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                itemCount: _history.length,
+                separatorBuilder: (context, index) => const SizedBox(width: 20),
+                itemBuilder: (context, index) {
+                  final h = _history[index];
+                  final val = h['khai'] as double;
+                  // 그래프 높이 조절 (최대 60px)
+                  final barHeight = (val / 150 * 50).clamp(5.0, 50.0);
+                  return _buildBar(barHeight, h['time']);
+                },
+              ),
         ),
       ],
     );
@@ -399,28 +411,39 @@ class _AirQualityScreenState extends State<AirQualityScreen> {
   }
 
   Widget _buildHealthAdvice() {
+    final pm25Val = double.tryParse(_data?.pm25 ?? '0') ?? 0;
+    final status = context.read<AppSettings>().getPm25Status(pm25Val);
+
+    String maskTitle = '마스크 착용 불필요';
+    String maskDesc = '대기 상태가 좋으므로 마스크 없이 활동 가능합니다.';
+    String ventTitle = '실내 환기 적극 추천';
+    String ventDesc = '창문을 열어 신선한 공기로 실내를 환기하세요.';
+    String playTitle = '실외 활동 적극 권장';
+    String playDesc = '야외 운동이나 산책하기 아주 좋은 날씨입니다.';
+
+    if (status == '보통') {
+      maskTitle = '마스크 지참 권유';
+      maskDesc = '민감군인 분들은 장시간 실외 활동 시 주의하세요.';
+      ventTitle = '주기적 실내 환기';
+      ventDesc = '오염이 심한 시간대를 피해 환기해 주세요.';
+      playTitle = '가벼운 실외 활동';
+      playDesc = '일상적인 실외 활동에 무리가 없는 수준입니다.';
+    } else if (status == '나쁨' || status == '매우나쁨' || status == '위험') {
+      maskTitle = '보건용 마스크 필수';
+      maskDesc = 'KF80 이상의 보건용 마스크를 반드시 착용하세요.';
+      ventTitle = '실내 환기 자제';
+      ventDesc = '외부 공기 유입을 차단하고 공기청정기를 사용하세요.';
+      playTitle = '실외 활동 제한';
+      playDesc = '장시간 무리한 실외 활동은 피하는 것이 좋습니다.';
+    }
+
     return Column(
       children: [
-        _buildAdviceCard(
-          '마스크 착용 권고',
-          '민감군은 실외 활동 시 일반 마스크 착용을 권장합니다.',
-          Icons.masks_rounded,
-          const Color(0xFFF1F8FF),
-        ),
+        _buildAdviceCard(maskTitle, maskDesc, Icons.masks_rounded, const Color(0xFFF1F8FF)),
         const SizedBox(height: 12),
-        _buildAdviceCard(
-          '실내 환기 적정',
-          '주기적인 환기는 좋으나, 도로변 등 오염원은 피하세요.',
-          Icons.grid_view_rounded,
-          const Color(0xFFF1F8FF),
-        ),
+        _buildAdviceCard(ventTitle, ventDesc, Icons.grid_view_rounded, const Color(0xFFF1F8FF)),
         const SizedBox(height: 12),
-        _buildAdviceCard(
-          '실외 활동 가능',
-          '대기 상태가 보통이므로 가벼운 운동은 무관합니다.',
-          Icons.directions_run_rounded,
-          const Color(0xFFF1F8FF),
-        ),
+        _buildAdviceCard(playTitle, playDesc, Icons.directions_run_rounded, const Color(0xFFF1F8FF)),
       ],
     );
   }

@@ -174,7 +174,7 @@ class AirQualityData {
     }
 
     return AirQualityData(
-      aqi: int.tryParse(getValue(json['khaiValue'])) ?? 0,
+      aqi: int.tryParse(getValue(json['khaiValue'])) ?? -1,
       pm25: getValue(json['pm25Value']),
       pm10: getValue(json['pm10Value']),
       o3: getValue(json['o3Value']),

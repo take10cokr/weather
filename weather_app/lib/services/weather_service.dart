@@ -428,30 +428,27 @@ class WeatherService {
   }
 
   /// 에어코리아 대기질 실시간 정보 가져오기 (시도별 실시간 측정 데이터)
+  /// 에어코리아 대기질 실시간 정보 가져오기 (시도별 실시간 측정 데이터)
   Future<AirQualityData?> fetchAirQuality(String sidoName, String cityName, String dongName) async {
     final mappedSido = _mapToAirKoreaSido(sidoName);
-
-    // 공공데이터 API 전용 쿼리 (ver 1.3로 통일)
-    final Map<String, String> queryParams = {
-      'serviceKey': _apiKey,
-      'returnType': 'json',
-      'numOfRows': '600', 
-      'pageNo': '1',
-      'sidoName': mappedSido,
-      'ver': '1.3', 
-    };
-
-    final uri = Uri.https('apis.data.go.kr', '/B552584/ArpltnInforInqireSvc/getCtprvnRltmMesureDnsty', queryParams);
+    
+    // Uri.https 대신 Uri.parse로 수동 조립하여 서비스키 인코딩 이슈 방지 (test_api5.dart 참고)
+    final url = 'https://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getCtprvnRltmMesureDnsty'
+        '?serviceKey=$_apiKey'
+        '&returnType=json'
+        '&numOfRows=600'
+        '&pageNo=1'
+        '&sidoName=$mappedSido'
+        '&ver=1.1';
 
     try {
-      final response = await http.get(uri).timeout(const Duration(seconds: 15));
+      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
       if (response.statusCode == 200) {
         final bodyText = utf8.decode(response.bodyBytes).trim();
         if (!bodyText.startsWith('{')) return null;
 
         final body = jsonDecode(bodyText);
         
-        // 공공데이터 API의 다양한 응답 구조 대응
         List? items;
         if (body['list'] is List) {
           items = body['list'];
@@ -465,28 +462,26 @@ class WeatherService {
         }
 
         if (items != null && items.isNotEmpty) {
-          // 검색어 정제
           final clean = (String s) => s.replaceAll(RegExp(r'[0-9\(\)]'), '').replaceAll(' ', '').replaceAll('동', '').replaceAll('구', '').replaceAll('시', '');
           final dRoot = clean(dongName);
           final cRoot = clean(cityName);
 
-          // 우선순위가 높은 측정소 찾기
           Map<String, dynamic>? findBest() {
-            // 1순위: 동(루트) 포함 측정소
+            // 1순위: 동 이름 포함
             if (dRoot.isNotEmpty) {
               for (var i in items!) {
                 final s = i['stationName'].toString();
                 if (s.contains(dRoot)) return i;
               }
             }
-            // 2순위: 시/구(루트) 포함 측정소
+            // 2순위: 시/구 이름 포함
             if (cRoot.isNotEmpty) {
               for (var i in items!) {
                 final s = i['stationName'].toString();
                 if (s.contains(cRoot)) return i;
               }
             }
-            // 3순위: 시/도 내에서 데이터가 들어오는 아무 측정소나 (최후의 보루)
+            // 3순위: 데이터가 있는 아무 곳이나 (최후의 보루)
             for (var i in items!) {
               final val = i['khaiValue']?.toString();
               if (val != null && val != '-' && val != 'null' && val.isNotEmpty) return i;
@@ -526,5 +521,40 @@ class WeatherService {
     if (raw.contains('제주')) return '제주';
     if (raw.contains('세종')) return '세종';
     return '서울'; // 폴백
+  }
+
+  /// 특정 측정소의 최근 24시간 대기질 기록 가져오기
+  Future<List<Map<String, dynamic>>> fetchAirQualityHistory(String stationName) async {
+    final url = 'https://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getMsrstnAcctoRltmMesureDnsty'
+        '?serviceKey=$_apiKey'
+        '&returnType=json'
+        '&numOfRows=24'
+        '&pageNo=1'
+        '&stationName=$stationName'
+        '&dataTerm=DAILY'
+        '&ver=1.0';
+
+    try {
+      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
+      if (response.statusCode == 200) {
+        final bodyText = utf8.decode(response.bodyBytes).trim();
+        if (!bodyText.startsWith('{')) return [];
+
+        final body = jsonDecode(bodyText);
+        final List? items = body['response']?['body']?['items'];
+        
+        if (items != null) {
+          return items.map((i) => {
+            'time': i['dataTime']?.toString().substring(11, 16) ?? '',
+            'khai': double.tryParse(i['khaiValue']?.toString() ?? '0') ?? 0.0,
+            'pm10': double.tryParse(i['pm10Value']?.toString() ?? '0') ?? 0.0,
+            'pm25': double.tryParse(i['pm25Value']?.toString() ?? '0') ?? 0.0,
+          }).toList().reversed.toList(); // 과거 -> 현재 순으로 정렬
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+    return [];
   }
 }
