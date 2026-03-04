@@ -23,6 +23,11 @@ void main() async {
   final settings = AppSettings();
   await settings.load(); // 저장된 설정 불러오기
 
+  // 사용자가 알림 켜둔 경우에만 상시 알림 시작
+  if (settings.notificationsEnabled) {
+    NotificationService.start();
+  }
+
 
 
 

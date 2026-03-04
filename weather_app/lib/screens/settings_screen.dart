@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/app_settings.dart';
+import '../services/notification_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/shared_bottom_nav_bar.dart';
 
@@ -40,8 +41,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 24),
             _buildSectionTitle('알림 설정'),
             _buildSettingCard([
-              _buildSwitchTile(Icons.notifications_active, '날씨 알림', '날씨 변화 시 Push 알림', _notificationsEnabled, (v) => setState(() => _notificationsEnabled = v), const Color(0xFF1565C0)),
-              _buildSwitchTile(Icons.location_on, '위치 서비스', '현재 위치 기반 날씨 조회', _locationEnabled, (v) => setState(() => _locationEnabled = v), const Color(0xFF2E7D32)),
+              _buildSwitchTile(
+                Icons.notifications_active, 
+                '날씨 알림', 
+                '상단바(Foreground) 상시 알림', 
+                settings.notificationsEnabled, 
+                (v) async {
+                  await settings.setNotificationsEnabled(v);
+                  if (v) {
+                    await NotificationService.start();
+                  } else {
+                    await NotificationService.stop();
+                  }
+                }, 
+                const Color(0xFF1565C0)
+              ),
+              _buildSwitchTile(
+                Icons.location_on, 
+                '위치 서비스', 
+                '현재 위치 기반 날씨 조회', 
+                settings.locationEnabled, 
+                (v) => settings.setLocationEnabled(v), 
+                const Color(0xFF2E7D32)
+              ),
             ]),
             const SizedBox(height: 16),
             _buildSectionTitle('표시 설정'),

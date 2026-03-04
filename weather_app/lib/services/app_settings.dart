@@ -54,11 +54,15 @@ class AppSettings extends ChangeNotifier {
   TemperatureUnit _temperatureUnit = TemperatureUnit.celsius;
   List<String> _interestItems = ['풍속', '자외선 지수', '가시거리', '습도']; // 기본 4개
   List<String> _favoriteLocations = []; // 즐겨찾기 지역
+  bool _notificationsEnabled = true;
+  bool _locationEnabled = true;
 
   DustStandard get dustStandard => _dustStandard;
   TemperatureUnit get temperatureUnit => _temperatureUnit;
   List<String> get interestItems => _interestItems;
   List<String> get favoriteLocations => _favoriteLocations;
+  bool get notificationsEnabled => _notificationsEnabled;
+  bool get locationEnabled => _locationEnabled;
 
   /// SharedPreferences에서 설정 불러오기
   Future<void> load() async {
@@ -87,6 +91,9 @@ class AppSettings extends ChangeNotifier {
       _favoriteLocations = savedLocations;
     }
     
+    _notificationsEnabled = prefs.getBool('notifications_enabled') ?? true;
+    _locationEnabled = prefs.getBool('location_enabled') ?? true;
+
     notifyListeners();
   }
 
@@ -139,6 +146,22 @@ class AppSettings extends ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList(_keyFavoriteLocations, _favoriteLocations);
+  }
+
+  /// 알림 켜기/끄기
+  Future<void> setNotificationsEnabled(bool enabled) async {
+    _notificationsEnabled = enabled;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('notifications_enabled', enabled);
+  }
+
+  /// 위치 서비스 켜기/끄기 (향후 위치 수집 로직에 연동 가능)
+  Future<void> setLocationEnabled(bool enabled) async {
+    _locationEnabled = enabled;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('location_enabled', enabled);
   }
 
   // ── 기준별 PM2.5 임계값 ──────────────────────────────
