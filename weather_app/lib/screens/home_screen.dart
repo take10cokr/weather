@@ -189,7 +189,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final parts = addressToSplit.split(' ').where((s) => s.trim().isNotEmpty).toList();
     
     if (parts.length >= 2) {
-      displayName = '${parts[parts.length - 2]} ${parts[parts.length - 1]}';
+      // 00구 00동 순서로 명시적으로 맞춤 (parts 배열 구조에 따라 앞-뒤 순서를 바꿈)
+      displayName = '${parts[parts.length - 1]} ${parts[parts.length - 2]}';
     }
 
     return Scaffold(
