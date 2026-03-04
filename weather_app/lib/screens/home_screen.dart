@@ -930,50 +930,107 @@ class _HomeScreenState extends State<HomeScreen> {
             double widthRatio = (item.maxTemp - item.minTemp) / tempRange;
             double endRatio = 1.0 - (startRatio + widthRatio);
 
+            String label = item.dayLabel;
+            String dateDisplay = '';
+            
+            if (label == '내일' || label == '모레') {
+              try {
+                final d = DateTime(
+                  int.parse(item.date.substring(0, 4)),
+                  int.parse(item.date.substring(4, 6)),
+                  int.parse(item.date.substring(6, 8)),
+                );
+                final weekDays = ['일', '월', '화', '수', '목', '금', '토'];
+                label = weekDays[d.weekday % 7];
+              } catch (_) {}
+            }
+
+            if (item.dayLabel != '오늘') {
+              try {
+                final m = int.parse(item.date.substring(4, 6));
+                final d = int.parse(item.date.substring(6, 8));
+                dateDisplay = '$m.$d';
+              } catch (_) {}
+            }
+
             return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 10),
+              padding: const EdgeInsets.symmetric(vertical: 12),
               child: Row(
                 children: [
-                  SizedBox(width: 50, child: Text(item.dayLabel, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 14))),
-                  const SizedBox(width: 4),
-                  Text(item.weatherEmoji, style: const TextStyle(fontSize: 22)),
-                  const SizedBox(width: 12),
-                  // 동적 온도 진행바
-                  Expanded(
-                    child: Row(
+                  // 1. 날짜 / 요일
+                  SizedBox(
+                    width: 40,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // 앞쪽 빈 공간 (최저기온까지)
-                        if (startRatio > 0)
-                          Spacer(flex: (startRatio * 100).toInt()),
-                        // 기온 바
-                        Expanded(
-                          flex: (widthRatio * 100).toInt() > 0 ? (widthRatio * 100).toInt() : 1, // 최소 두께 보장
-                          child: Container(
-                            height: 4,
-                            decoration: BoxDecoration(
-                              gradient: const LinearGradient(colors: [Color(0xFF64B5F6), Color(0xFF2196F3)]),
-                              borderRadius: BorderRadius.circular(2),
+                        Text(label, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 15)),
+                        if (dateDisplay.isNotEmpty)
+                          Text(dateDisplay, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+                      ],
+                    ),
+                  ),
+                  // 2. 날씨 아이콘
+                  SizedBox(
+                    width: 40,
+                    child: Center(
+                      child: Text(item.weatherEmoji, style: const TextStyle(fontSize: 22)),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  
+                  // 3. 최저기온
+                  SizedBox(
+                    width: 35,
+                    child: Text(
+                      context.watch<AppSettings>().getTemperature(item.minTemp),
+                      textAlign: TextAlign.right,
+                      style: const TextStyle(color: AppTheme.textSecondary, fontSize: 14, fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  
+                  // 4. 온도 막대바
+                  Expanded(
+                    child: Container(
+                      height: 6,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF0F0F0),
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                      clipBehavior: Clip.hardEdge,
+                      child: Row(
+                        children: [
+                          if (startRatio > 0)
+                            Spacer(flex: (startRatio * 1000).toInt()),
+                          Expanded(
+                            flex: (widthRatio * 1000).toInt() > 0 ? (widthRatio * 1000).toInt() : 1,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(colors: [Color(0xFF64B5F6), Color(0xFF2196F3)]),
+                                borderRadius: BorderRadius.circular(3),
+                              ),
                             ),
                           ),
-                        ),
-                        // 뒤쪽 빈 공간 (최고기온부터)
-                        if (endRatio > 0)
-                          Spacer(flex: (endRatio * 100).toInt()),
-                      ],
+                          if (endRatio > 0)
+                            Spacer(flex: (endRatio * 1000).toInt()),
+                        ],
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
+                  
+                  // 5. 최고기온
                   SizedBox(
-                    width: 65,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        Text(context.watch<AppSettings>().getTemperature(item.maxTemp), style: const TextStyle(fontWeight: FontWeight.w700, color: AppTheme.textPrimary, fontSize: 13)),
-                        const SizedBox(width: 4),
-                        Text(context.watch<AppSettings>().getTemperature(item.minTemp), style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
-                      ],
+                    width: 35,
+                    child: Text(
+                      context.watch<AppSettings>().getTemperature(item.maxTemp),
+                      textAlign: TextAlign.left,
+                      style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14, fontWeight: FontWeight.w600),
                     ),
                   ),
+                  
+                  // 6. 꺾쇠 아이콘
+                  Icon(Icons.keyboard_arrow_down, size: 16, color: AppTheme.textSecondary.withValues(alpha: 0.5)),
                 ],
               ),
             );
